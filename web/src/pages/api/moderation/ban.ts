@@ -4,7 +4,11 @@ import { authOptions } from "../auth/[...nextauth]";
 import { prisma } from "@/server/db";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
+  if (req.method === "OPTIONS") {
+    res.setHeader("Allow", "POST, OPTIONS");
+    return res.status(204).end();
+  }
+  if (req.method !== "POST") return res.status(405).setHeader("Allow", "POST, OPTIONS").json({ error: "method_not_allowed" });
   const session = await getServerSession(req, res, authOptions);
   if (!session) return res.status(401).json({ error: "unauthorized" });
 
