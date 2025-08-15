@@ -52,6 +52,13 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
     setConnState(room.state as ConnectionState);
     const onState = () => setConnState(room.state as ConnectionState);
     room.on(RoomEvent.ConnectionStateChanged, onState);
+    // try auto-starting audio when connected; if blocked, show button
+    const tryStart = async () => {
+      try { await (room as any)?.startAudio?.(); setAudioReady(true); } catch { setAudioReady(false); }
+    };
+    if ((room as any)?.state === ConnectionState.Connected) { void tryStart(); }
+    const onConnected = () => { if ((room as any)?.state === ConnectionState.Connected) void tryStart(); };
+    room.on(RoomEvent.Connected, onConnected as any);
     return () => { room.off(RoomEvent.ConnectionStateChanged, onState); };
   }, [room]);
   useEffect(() => {
@@ -140,10 +147,11 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
     })();
     const sendHeartbeat = async () => {
       try {
+        const body = new URLSearchParams({ room: rn });
         await fetch("/api/presence/heartbeat", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ room: rn }),
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body,
         });
       } catch {}
     };
@@ -183,7 +191,8 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
 
     const leave = async () => {
       try {
-        await fetch("/api/presence/leave", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ room: rn }) });
+        const body = new URLSearchParams({ room: rn });
+        await fetch("/api/presence/leave", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body });
       } catch {}
     };
     const onBeforeUnload = () => { void leave(); };
@@ -209,6 +218,14 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
   return (
     <div className="col" style={{ gap: 16 }}>
       <RoomAudioRenderer />
+      {!audioReady && connState === ConnectionState.Connected && (
+        <div className="card" style={{ background: '#fff7ed', borderColor: '#fb923c' }}>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>ブラウザの制限で音声が停止しています。</div>
+            <button className="btn" onClick={enableAudio}>音声を有効化</button>
+          </div>
+        </div>
+      )}
       {connState === ConnectionState.Reconnecting && (
         <div className="card" style={{ background: "#eff6ff", borderColor: "#3b82f6" }}>
           <div className="row" style={{ justifyContent: "space-between" }}>
@@ -279,10 +296,11 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
                   await (room as any)?.localParticipant?.publishData?.(new TextEncoder().encode(JSON.stringify(payload)), { reliable: false, topic: "reaction" } as any);
                 } catch {}
                 try {
+                  const body = new URLSearchParams({ room: (roomName || (room as any)?.name) as string, type: "like" });
                   await fetch("/api/reaction/send", {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ room: roomName || (room as any)?.name, type: "like" }),
+                    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                    body,
                   });
                 } catch {}
               }}
@@ -302,10 +320,11 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
                   await (room as any)?.localParticipant?.publishData?.(new TextEncoder().encode(JSON.stringify(payload)), { reliable: false, topic: "reaction" } as any);
                 } catch {}
                 try {
+                  const body = new URLSearchParams({ room: (roomName || (room as any)?.name) as string, type: "gift" });
                   await fetch("/api/reaction/send", {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ room: roomName || (room as any)?.name, type: "gift" }),
+                    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                    body,
                   });
                 } catch {}
               }}
@@ -320,10 +339,11 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
                   const next = e.target.checked;
                   setIsPublicState(next);
                   try {
+                    const body = new URLSearchParams({ room: (roomName || (room as any)?.name) as string, isPublic: String(next) });
                     await fetch("/api/room/set-public", {
                       method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ room: roomName || (room as any)?.name, isPublic: next }),
+                      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                      body,
                     });
                   } catch {}
                 }}
@@ -534,7 +554,8 @@ export default function HomePage() {
             const dn = normalizeDisplayName(createName);
             if (!isValidDisplayName(dn)) { alert('表示名が不正です（1〜32文字、絵文字・特殊記号不可）'); return; }
             try {
-              const r = await fetch('/api/room/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ displayName: dn }) });
+              const body = new URLSearchParams({ displayName: dn });
+              const r = await fetch('/api/room/create', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
               if (!r.ok) { alert('ルーム作成に失敗しました'); return; }
               const j = await r.json();
               window.location.assign(`/room/${encodeURIComponent(j.slug)}?publish=true`);

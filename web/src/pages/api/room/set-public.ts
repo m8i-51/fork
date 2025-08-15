@@ -14,8 +14,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!session) return res.status(401).json({ error: "unauthorized" });
   const identity = (session as any).userId || session.user?.email || "";
 
-  const { room, isPublic } = req.body as { room?: string; isPublic?: boolean };
-  if (!room || typeof isPublic !== "boolean") return res.status(400).json({ error: "invalid_params" });
+  const { room, isPublic: isPublicRaw } = req.body as { room?: string; isPublic?: boolean | string };
+  if (!room) return res.status(400).json({ error: "invalid_params" });
+  const isPublic = typeof isPublicRaw === 'string' ? (isPublicRaw === 'true') : !!isPublicRaw;
 
   const row = await prisma.room.findUnique({ where: { name: room } });
   if (!row) return res.status(404).json({ error: "room_not_found" });

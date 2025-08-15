@@ -6,6 +6,7 @@ import { Participants } from "@/components/Participants";
 
 export function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void; onRejoin: () => void; isHost: boolean; roomName: string }) {
   const room = useRoomContext();
+  const [audioReady, setAudioReady] = useState(false);
   const [role, setRole] = useState<"host" | "viewer" | null>(null);
   const [viewerCount, setViewerCount] = useState<number>(0);
   const viewerTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -37,6 +38,11 @@ export function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () 
     setConnState((room as any)?.state as ConnectionState);
     const onState = () => setConnState(((room as any)?.state) as ConnectionState);
     (room as any)?.on?.(RoomEvent.ConnectionStateChanged, onState);
+    // try auto-starting audio when connected; if blocked, show enable button
+    const tryStart = async () => { try { await (room as any)?.startAudio?.(); setAudioReady(true); } catch { setAudioReady(false); } };
+    if ((room as any)?.state === ConnectionState.Connected) { void tryStart(); }
+    const onConnected = () => { if ((room as any)?.state === ConnectionState.Connected) void tryStart(); };
+    (room as any)?.on?.(RoomEvent.Connected, onConnected as any);
     return () => { (room as any)?.off?.(RoomEvent.ConnectionStateChanged, onState); };
   }, [room]);
 
@@ -101,7 +107,7 @@ export function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () 
     (async () => {
       try { const r = await fetch(`/api/reaction/summary?room=${encodeURIComponent(rn)}`); if (r.ok) { const j = await r.json(); if (j?.summary) setReactions((prev) => ({ ...prev, ...j.summary })); } } catch {}
     })();
-    const sendHeartbeat = async () => { try { await fetch("/api/presence/heartbeat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ room: rn }) }); } catch {} };
+    const sendHeartbeat = async () => { try { const body = new URLSearchParams({ room: rn }); await fetch("/api/presence/heartbeat", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body }); } catch {} };
     void sendHeartbeat();
     presenceTimer.current = setInterval(sendHeartbeat, 20000);
 
@@ -117,7 +123,7 @@ export function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () 
     void fetchViewers();
     viewerTimer.current = setInterval(fetchViewers, 5000);
 
-    const onBeforeUnload = () => { void fetch("/api/presence/leave", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ room: rn }) }); };
+    const onBeforeUnload = () => { const body = new URLSearchParams({ room: rn }); void fetch("/api/presence/leave", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body }); };
     window.addEventListener("beforeunload", onBeforeUnload);
     try { const saved = localStorage.getItem("audioinputDeviceId"); if (saved) { (room as any)?.switchActiveDevice?.("audioinput", saved); } } catch {}
     return () => {
@@ -125,13 +131,22 @@ export function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () 
       if (viewerTimer.current) clearInterval(viewerTimer.current);
       try { es?.close(); } catch {}
       window.removeEventListener("beforeunload", onBeforeUnload as any);
-      void fetch("/api/presence/leave", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ room: rn }) });
+      const body = new URLSearchParams({ room: rn });
+      void fetch("/api/presence/leave", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body });
     };
   }, [room]);
 
   return (
     <div className="col" style={{ gap: 16 }}>
       <RoomAudioRenderer />
+      {!audioReady && connState === ConnectionState.Connected && (
+        <div className="card" style={{ background: '#fff7ed', borderColor: '#fb923c' }}>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>ブラウザの制限で音声が停止しています。</div>
+            <button className="btn" onClick={async () => { try { await (room as any)?.startAudio?.(); setAudioReady(true); } catch {} }}>音声を有効化</button>
+          </div>
+        </div>
+      )}
       <div className="topbar" style={{ position: 'sticky', top: 8, zIndex: 10 }}>
         <div className="row" style={{ gap: 8, minWidth: 0 }}>
           <div className={`status-dot ${connState === ConnectionState.Connected ? 'status-connected' : connState === ConnectionState.Reconnecting ? 'status-reconnecting' : 'status-disconnected'}`} />
