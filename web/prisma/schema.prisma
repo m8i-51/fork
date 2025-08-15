@@ -1,0 +1,56 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Room {
+  id            Int      @id @default(autoincrement())
+  name          String   @unique
+  displayName   String?
+  hostIdentity  String?
+  isPublic      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+}
+
+model Ban {
+  id        Int      @id @default(autoincrement())
+  roomName  String
+  identity  String
+  createdAt DateTime @default(now())
+
+  @@unique([roomName, identity])
+}
+
+model Presence {
+  id        Int      @id @default(autoincrement())
+  roomName  String
+  identity  String
+  name      String?
+  lastSeen  DateTime @default(now())
+
+  @@unique([roomName, identity])
+  @@index([roomName, lastSeen])
+}
+
+model Reaction {
+  id        Int      @id @default(autoincrement())
+  roomName  String
+  identity  String
+  type      String
+  createdAt DateTime @default(now())
+
+  @@index([roomName, createdAt])
+}
+
+model ReactionAggregate {
+  id       Int    @id @default(autoincrement())
+  roomName String
+  type     String
+  count    Int    @default(0)
+
+  @@unique([roomName, type])
+}

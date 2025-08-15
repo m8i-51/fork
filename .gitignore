@@ -1,0 +1,44 @@
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.kiro/
+
+# Logs
+logs/
+*.log
+*.log.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Node/Next.js
+node_modules/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+
+# Web app (web/)
+web/node_modules/
+web/.next/
+web/out/
+web/.turbo/
+web/.vercel/
+
+# Environment files
+.env
+.env.*
+!/.env.example
+web/.env
+web/.env.local
+web/.env.*.local
+!web/.env.local.example
+
+# Prisma (SQLite dev DB)
+web/prisma/dev.db
+web/prisma/dev.db-shm
+web/prisma/dev.db-wal
+web/prisma/dev.db-journal
+
