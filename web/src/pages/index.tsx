@@ -530,26 +530,26 @@ export default function HomePage() {
 
   return (
     <div className="container">
-      <h1>fork</h1>
+      <h1 style={{ fontSize: '28px', marginBottom: '20px', textAlign: 'center' }}>fork</h1>
       <div className="card" style={{ marginBottom: 16 }}>
         {status !== "authenticated" ? (
-          <div className="row" style={{ justifyContent: "space-between" }}>
+          <div className="row" style={{ justifyContent: "space-between", flexWrap: 'wrap', gap: 8 }}>
             <div>サインインして開始</div>
-            <div className="row">
+            <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
               <button className="btn" onClick={() => signIn("google", { callbackUrl: typeof window !== 'undefined' ? window.location.href : undefined })}>Googleでサインイン</button>
               <button className="btn" onClick={() => signIn("twitter", { callbackUrl: typeof window !== 'undefined' ? window.location.href : undefined })}>Twitterでサインイン</button>
             </div>
           </div>
         ) : (
-          <div className="row" style={{ justifyContent: "space-between" }}>
+          <div className="row" style={{ justifyContent: "space-between", flexWrap: 'wrap', gap: 8 }}>
             <div>こんにちは、{userName}</div>
             <button className="btn secondary" onClick={() => signOut()}>サインアウト</button>
           </div>
         )}
       </div>
       <div className="card" style={{ marginBottom: 16 }}>
-        <div className="row" style={{ marginTop: 8 }}>
-          <input className="input" placeholder="配信タイトル" required value={createName} onChange={(e) => setCreateName(e.target.value)} />
+        <div className="row" style={{ marginTop: 8, flexWrap: 'wrap', gap: 8 }}>
+          <input className="input" placeholder="配信タイトル" required value={createName} onChange={(e) => setCreateName(e.target.value)} style={{ flex: 1, minWidth: 0 }} />
           <button className="btn" disabled={status !== "authenticated" || !isValidDisplayName(createName)} onClick={async () => {
             const dn = normalizeDisplayName(createName);
             if (!isValidDisplayName(dn)) { alert('表示名が不正です（1〜32文字、絵文字・特殊記号不可）'); return; }
@@ -580,8 +580,8 @@ export default function HomePage() {
               <div className="grid">
                 {publicRooms.map((r) => (
                   <div key={r.name} className="card room-card">
-                    <div className="row" style={{ justifyContent: "space-between" }}>
-                      <div style={{ fontWeight: 600 }}>{(r as any).displayName || r.name}</div>
+                    <div className="row" style={{ justifyContent: "space-between", flexWrap: 'wrap', gap: 8 }}>
+                      <div style={{ fontWeight: 600, flex: 1, minWidth: 0 }}>{(r as any).displayName || r.name}</div>
                       <span className="badge-live"><span className="dot" style={{ color: 'white' }}></span>LIVE</span>
                     </div>
                     <div className="row-bottom">

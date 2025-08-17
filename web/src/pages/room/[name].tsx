@@ -89,9 +89,9 @@ export default function RoomPage() {
 
   return (
     <div className="container">
-      <h1>fork</h1>
-      {error && (<div className="card" style={{ marginBottom: 12, borderColor: 'var(--danger)', color: 'var(--danger)' }}>{error}</div>)}
-      {!WS_URL && (<p style={{ color: 'var(--danger)' }}>NEXT_PUBLIC_LIVEKIT_WS_URL が未設定です。`.env.local`を確認してください。</p>)}
+      <h1 style={{ fontSize: '24px', marginBottom: '16px' }}>fork</h1>
+      {error && (<div className="card" style={{ marginBottom: 12, borderColor: 'var(--danger)', color: 'var(--danger)', fontSize: '14px' }}>{error}</div>)}
+      {!WS_URL && (<p style={{ color: 'var(--danger)', fontSize: '14px' }}>NEXT_PUBLIC_LIVEKIT_WS_URL が未設定です。`.env.local`を確認してください。</p>)}
       {token && WS_URL && (
         <LiveKitRoom serverUrl={WS_URL} token={token} connect>
           <InRoomUI

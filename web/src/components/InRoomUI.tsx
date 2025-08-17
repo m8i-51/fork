@@ -168,7 +168,7 @@ export function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () 
         <div style={{ flex: 1 }} className="card">
           <h3>チャット</h3>
           {/* 反応ボタンをチャット上部に配置（視聴者のみ押下可） */}
-          <div className="row" style={{ gap: 8, marginBottom: 8 }}>
+          <div className="row" style={{ gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
             <button className="btn secondary" disabled={isHost || role === "host"} title={(isHost || role === 'host') ? '配信者は押せません' : 'いいね'} onClick={async () => {
               if (isHost || role === 'host') return; setReactions((p)=>({ ...p, like: (p.like||0)+1 })); triggerBump('like'); spawnFloat('like');
               try { await (room as any)?.localParticipant?.publishData?.(new TextEncoder().encode(JSON.stringify({ type:'like' })), { reliable:false, topic:'reaction' } as any);} catch {}
@@ -182,14 +182,14 @@ export function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () 
           </div>
           {/* ホスト用の公開トグル */}
           {(isHost || role === "host") && (
-            <label className="row" style={{ gap: 6, marginBottom: 8 }}>
+            <label className="row" style={{ gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
               <input type="checkbox" checked={!!isPublicState} onChange={async (e) => { const next = e.target.checked; setIsPublicState(next); try { await fetch('/api/room/set-public', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ room: roomName || (room as any)?.name, isPublic: next }) }); } catch {} }} />
-              ルームを一覧に公開
+              <span style={{ fontSize: '14px' }}>ルームを一覧に公開</span>
             </label>
           )}
           <Chat room={room as any} />
         </div>
-        <div style={{ minWidth: 360 }} className="card">
+        <div style={{ minWidth: 'auto' }} className="card">
           <h3>参加者</h3>
           <Participants room={room as any} isHost={isHost || role === 'host'} />
         </div>
