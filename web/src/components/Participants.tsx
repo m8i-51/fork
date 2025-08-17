@@ -75,13 +75,13 @@ export function Participants({ room, isHost }: Props) {
         const isLocal = p.isLocal ?? false;
         const speaking = !!p.isSpeaking;
         return (
-          <div key={p.sid} className="row" style={{ justifyContent: "space-between" }}>
-            <div>
+          <div key={p.sid} className="row" style={{ justifyContent: "space-between", flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <strong>{p.name || p.identity}</strong>
               {isLocal ? <span style={{ marginLeft: 6, color: "#6b7280" }}>(自分)</span> : null}
               {speaking ? <span style={{ marginLeft: 8, color: "#059669" }}>発話中</span> : null}
             </div>
-            <div className="row">
+            <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
               {!isLocal && (
                 <>
                   {isHost && (

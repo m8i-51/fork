@@ -86,3 +86,126 @@ h3 { margin: 0 0 12px 0; padding-bottom: 8px; border-bottom: 1px solid var(--bor
 /* Chat unread */
 .chat-new { position: sticky; bottom: 8px; text-align: right; }
 .chat-new button { background: var(--accent); color: white; border: none; border-radius: 9999px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+
+/* Responsive Design for Mobile */
+@media (max-width: 768px) {
+  .container { padding: 12px; }
+  .card { padding: 12px; border-radius: 8px; }
+  .row { gap: 8px; }
+  .col { gap: 6px; }
+  .stack { flex-direction: column; gap: 12px; }
+  
+  /* Mobile-friendly buttons */
+  .btn { 
+    padding: 12px 16px; 
+    height: 44px; 
+    font-size: 16px; 
+    min-width: 44px; 
+    justify-content: center; 
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  
+  /* Mobile-friendly inputs */
+  .input { 
+    height: 44px; 
+    font-size: 16px; 
+    padding: 12px 14px; 
+    -webkit-appearance: none;
+    border-radius: 8px;
+  }
+  
+  /* Mobile-friendly topbar */
+  .topbar { 
+    flex-direction: column; 
+    gap: 8px; 
+    padding: 12px; 
+    align-items: stretch; 
+  }
+  
+  .topbar .row { 
+    justify-content: space-between; 
+    min-width: 0; 
+  }
+  
+  /* Mobile-friendly chat */
+  .chat { height: 300px; }
+  .chat-msg { max-width: 90%; }
+  .chat-messages { 
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+  
+  /* Mobile-friendly grid */
+  .grid { 
+    grid-template-columns: 1fr; 
+    gap: 8px; 
+  }
+  
+  /* Mobile-friendly headings */
+  h3 { 
+    font-size: 18px; 
+    margin: 0 0 10px 0; 
+    padding-bottom: 6px; 
+  }
+  
+  /* Mobile-friendly reaction buttons */
+  .reactions-overlay { 
+    right: 16px; 
+    bottom: 100px; 
+  }
+  
+  .float { 
+    font-size: 20px; 
+  }
+  
+  /* Mobile-friendly status dot */
+  .status-dot { 
+    width: 12px; 
+    height: 12px; 
+  }
+  
+  /* Mobile-friendly muted text */
+  .muted { 
+    font-size: 14px; 
+  }
+  
+  /* Touch-friendly spacing */
+  .row > * + * { 
+    margin-left: 0; 
+  }
+  
+  /* Prevent text selection on buttons */
+  .btn { 
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+  }
+}
+
+/* Extra small mobile devices */
+@media (max-width: 480px) {
+  .container { padding: 8px; }
+  .card { padding: 10px; }
+  .btn { 
+    padding: 10px 14px; 
+    height: 40px; 
+    font-size: 14px; 
+  }
+  .input { 
+    height: 40px; 
+    font-size: 14px; 
+    padding: 10px 12px; 
+  }
+  .chat { height: 250px; }
+  .topbar { padding: 10px; }
+  h3 { font-size: 16px; }
+}
+
+/* Landscape orientation adjustments for mobile */
+@media (max-width: 768px) and (orientation: landscape) {
+  .chat { height: 200px; }
+  .stack { gap: 8px; }
+  .topbar { padding: 8px 12px; }
+}
