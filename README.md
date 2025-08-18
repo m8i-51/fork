@@ -1,6 +1,6 @@
 # fork – Live Audio MVP (Web)
 
-音声ライブ配信の最小実装（Spoon風）。本プロジェクト名は「fork」です。
+音声ライブ配信の最小実装。本プロジェクト名は「fork」です。
 
 - 技術スタック: Next.js + NextAuth(Google/Twitter) + LiveKit(JS SDK) + Prisma(PostgreSQL)
 - 主な機能: 認証、ルーム作成/入室、音声配信/視聴、チャット、視聴者数（SSE）、リアクション（👍/🎁）、監視ページ
