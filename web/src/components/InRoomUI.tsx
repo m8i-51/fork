@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { RoomAudioRenderer, useRoomContext, MediaDeviceMenu, TrackToggle } from "@livekit/components-react";
+import { RoomAudioRenderer, useRoomContext, TrackToggle } from "@livekit/components-react";
 import { ConnectionState, RoomEvent, Track } from "livekit-client";
 import { Chat } from "@/components/Chat";
 import { Participants } from "@/components/Participants";
@@ -7,6 +7,8 @@ import { Participants } from "@/components/Participants";
 export function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void; onRejoin: () => void; isHost: boolean; roomName: string }) {
   const room = useRoomContext();
   const [audioReady, setAudioReady] = useState(false);
+  const [showParticipants, setShowParticipants] = useState(false);
+  const [participantsCount, setParticipantsCount] = useState<number>(1);
   const [role, setRole] = useState<"host" | "viewer" | null>(null);
   const [viewerCount, setViewerCount] = useState<number>(0);
   const viewerTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -25,12 +27,41 @@ export function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () 
   const triggerBump = (type: 'like' | 'gift') => { if (type === 'like') setBumpLike(Date.now()); if (type === 'gift') setBumpGift(Date.now()); };
   const [floats, setFloats] = useState<{ id: string; type: 'like' | 'gift' }[]>([]);
   const spawnFloat = (type: 'like' | 'gift') => { const id = Math.random().toString(36).slice(2); setFloats((f) => [...f, { id, type }]); setTimeout(() => setFloats((f) => f.filter((x) => x.id !== id)), 1200); };
+  const [showDeviceModal, setShowDeviceModal] = useState(false);
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [deviceLoading, setDeviceLoading] = useState(false);
+  const [deviceError, setDeviceError] = useState<string | null>(null);
 
   useEffect(() => {
     try {
       const meta = (room as any)?.localParticipant?.metadata ? JSON.parse((room as any).localParticipant.metadata) : {};
       if (meta?.role === "host" || meta?.role === "viewer") setRole(meta.role);
     } catch {}
+  }, [room]);
+
+  // Track participant count for header button
+  useEffect(() => {
+    if (!room) return;
+    const compute = () => {
+      try {
+        const p: any = (room as any)?.participants;
+        let n = 1; // include local participant
+        if (p) {
+          if (typeof p.size === 'number') n += p.size;
+          else if (Array.isArray(p)) n += p.length;
+        }
+        setParticipantsCount(n);
+      } catch {}
+    };
+    compute();
+    const onJoin = () => compute();
+    const onLeaveP = () => compute();
+    (room as any)?.on?.(RoomEvent.ParticipantConnected, onJoin);
+    (room as any)?.on?.(RoomEvent.ParticipantDisconnected, onLeaveP);
+    return () => {
+      (room as any)?.off?.(RoomEvent.ParticipantConnected, onJoin);
+      (room as any)?.off?.(RoomEvent.ParticipantDisconnected, onLeaveP);
+    };
   }, [room]);
 
   useEffect(() => {
@@ -152,21 +183,29 @@ export function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () 
           <div className={`status-dot ${connState === ConnectionState.Connected ? 'status-connected' : connState === ConnectionState.Reconnecting ? 'status-reconnecting' : 'status-disconnected'}`} />
           <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{roomTitle}</div>
         </div>
-        <div className="row" style={{ gap: 8, alignItems: 'center' }}>
-          <div className="muted">👁 <span className={`count ${bumpLike || bumpGift ? 'bump' : ''}`}>{viewerCount}</span></div>
+        <div className="row controls" style={{ gap: 8, alignItems: 'center' }}>
           {(isHost || role === "host") && (
             <>
               <TrackToggle source={Track.Source.Microphone} />
-              <MediaDeviceMenu kind="audioinput" title="マイク選択" onActiveDeviceChange={(_k, d) => { const id = d ?? 'default'; saveAudioInputDeviceId(id); try { (room as any)?.switchActiveDevice?.('audioinput', id); } catch {} }}>マイク選択</MediaDeviceMenu>
+              <button className="btn secondary" onClick={async () => { setShowDeviceModal(true); try { setDeviceLoading(true); setDeviceError(null); let list = await navigator.mediaDevices.enumerateDevices(); if (!list.some(d=>d.label)) { try { const s = await navigator.mediaDevices.getUserMedia({ audio:true }); s.getTracks().forEach(t=>t.stop()); list = await navigator.mediaDevices.enumerateDevices(); } catch {} } setDevices(list.filter(d=>d.kind==='audioinput') as MediaDeviceInfo[]); } catch { setDeviceError('デバイスの取得に失敗しました'); } finally { setDeviceLoading(false); } }}>マイク選択</button>
+              <label className="row" style={{ gap: 6 }}>
+                <input type="checkbox" checked={!!isPublicState} onChange={async (e) => { const next = e.target.checked; setIsPublicState(next); try { const body = new URLSearchParams({ room: (roomName || (room as any)?.name) as string, isPublic: String(next) }); await fetch('/api/room/set-public', { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body }); } catch {} }} />
+                <span style={{ fontSize: 12 }}>一覧に公開</span>
+              </label>
             </>
           )}
-          <button className="btn secondary" onClick={leaveRoom}>退出</button>
+          <button className="btn secondary" onClick={leaveRoom}>{(isHost || role === 'host') ? '配信終了' : '退出'}</button>
         </div>
       </div>
 
       <div className="stack">
         <div style={{ flex: 1 }} className="card">
-          <h3>チャット</h3>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ margin: 0, textAlign: 'left' }}>チャット</h3>
+            <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+              <button className="btn secondary" onClick={() => setShowParticipants(true)}>視聴者 ({participantsCount})</button>
+            </div>
+          </div>
           {/* 反応ボタンをチャット上部に配置（視聴者のみ押下可） */}
           <div className="row" style={{ gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
             <button className="btn secondary" disabled={isHost || role === "host"} title={(isHost || role === 'host') ? '配信者は押せません' : 'いいね'} onClick={async () => {
@@ -180,19 +219,51 @@ export function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () 
               try { await fetch('/api/reaction/send', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ room: roomName || (room as any)?.name, type:'gift' }) }); } catch {}
             }}>🎁 {reactions.gift || 0}</button>
           </div>
-          {/* ホスト用の公開トグル */}
-          {(isHost || role === "host") && (
-            <label className="row" style={{ gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
-              <input type="checkbox" checked={!!isPublicState} onChange={async (e) => { const next = e.target.checked; setIsPublicState(next); try { await fetch('/api/room/set-public', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ room: roomName || (room as any)?.name, isPublic: next }) }); } catch {} }} />
-              <span style={{ fontSize: '14px' }}>ルームを一覧に公開</span>
-            </label>
-          )}
+          {/* 公開トグルはトップバーへ移動 */}
           <Chat room={room as any} />
         </div>
-        <div style={{ minWidth: 'auto' }} className="card">
-          <h3>参加者</h3>
-          <Participants room={room as any} isHost={isHost || role === 'host'} />
-        </div>
+        {/* 視聴者はモーダルで表示してチャット幅を広く確保 */}
+        {showParticipants && (
+          <div role="dialog" aria-modal="true" className="modal-overlay" onClick={() => setShowParticipants(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 50 }}>
+            <div className="card" onClick={(e)=>e.stopPropagation()} style={{ width: 'min(90vw, 720px)', maxHeight: '80vh', overflow: 'auto' }}>
+              <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <h3 style={{ margin: 0, textAlign: 'left' }}>視聴者</h3>
+                <button className="btn secondary" onClick={() => setShowParticipants(false)}>閉じる</button>
+              </div>
+              <Participants room={room as any} isHost={isHost || role === 'host'} />
+            </div>
+          </div>
+        )}
+
+        {showDeviceModal && (
+          <div role="dialog" aria-modal="true" className="modal-overlay" onClick={() => setShowDeviceModal(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', display:'flex', justifyContent:'center', alignItems:'center', zIndex:60 }}>
+            <div className="card" onClick={(e)=>e.stopPropagation()} style={{ width: 'min(90vw, 560px)', maxHeight: '80vh', overflow:'auto' }}>
+              <div className="row" style={{ justifyContent:'space-between', alignItems:'center', marginBottom: 8 }}>
+                <h3 style={{ margin:0, textAlign:'left' }}>マイク選択</h3>
+                <button className="btn secondary" onClick={() => setShowDeviceModal(false)}>閉じる</button>
+              </div>
+              {deviceError && <div className="card" style={{ borderColor:'var(--danger)', color:'var(--danger)', marginBottom:8 }}>{deviceError}</div>}
+              {deviceLoading ? (
+                <div className="muted">読み込み中…</div>
+              ) : (
+                <div className="col" style={{ gap: 8 }}>
+                  {devices.length === 0 && <div className="muted">マイクが見つかりませんでした。</div>}
+                  {devices.map((d) => (
+                    <button key={d.deviceId} className="btn secondary" style={{ justifyContent:'space-between' }} onClick={async () => {
+                      const id = d.deviceId || 'default';
+                      saveAudioInputDeviceId(id);
+                      try { await (room as any)?.switchActiveDevice?.('audioinput', id); } catch {}
+                      setShowDeviceModal(false);
+                    }}>
+                      <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'70%' }}>{d.label || 'マイク'}</span>
+                      <span className="muted" style={{ fontSize:12 }}>選択</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="reactions-overlay" style={{ position:'fixed', right:24, bottom:80, pointerEvents:'none' }}>

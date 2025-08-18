@@ -63,7 +63,7 @@ export default function MonitorPage() {
                     <td style={{ padding: '8px' }}>{r.name}</td>
                     <td style={{ padding: '8px' }}>{r.hostIdentity || '-'}</td>
                     <td style={{ padding: '8px' }}>{String(!!r.isPublic)}</td>
-                    <td style={{ padding: '8px', textAlign: 'right' }}>👁 {r.viewers}</td>
+                    <td style={{ padding: '8px', textAlign: 'right' }}>視聴者数 {r.viewers}</td>
                   </tr>
                 ))}
               </tbody>

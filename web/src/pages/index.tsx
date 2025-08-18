@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { signIn, signOut, useSession } from "next-auth/react";
-import { LiveKitRoom, ControlBar, RoomAudioRenderer, useRoomContext, MediaDeviceMenu, TrackToggle } from "@livekit/components-react";
+import { LiveKitRoom, ControlBar, RoomAudioRenderer, useRoomContext, TrackToggle } from "@livekit/components-react";
 import { ConnectionState, RoomEvent, Track } from "livekit-client";
 import { Chat } from "@/components/Chat";
 import { Participants } from "@/components/Participants";
@@ -11,7 +11,9 @@ const WS_URL = process.env.NEXT_PUBLIC_LIVEKIT_WS_URL || "";
 
 function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void; onRejoin: () => void; isHost: boolean; roomName: string }) {
   const room = useRoomContext();
+  const [showParticipants, setShowParticipants] = useState(false);
   const [role, setRole] = useState<"host" | "viewer" | null>(null);
+  const [participantsCount, setParticipantsCount] = useState<number>(1);
   const [viewerCount, setViewerCount] = useState<number>(0);
   const viewerTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const presenceTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -37,6 +39,10 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
     setFloats((f) => [...f, { id, type }]);
     setTimeout(() => setFloats((f) => f.filter((x) => x.id !== id)), 1200);
   };
+  const [showDeviceModal, setShowDeviceModal] = useState(false);
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [deviceLoading, setDeviceLoading] = useState(false);
+  const [deviceError, setDeviceError] = useState<string | null>(null);
   const saveAudioInputDeviceId = (deviceId: string) => {
     try { localStorage.setItem("audioinputDeviceId", deviceId); } catch {}
   };
@@ -60,6 +66,26 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
     const onConnected = () => { if ((room as any)?.state === ConnectionState.Connected) void tryStart(); };
     room.on(RoomEvent.Connected, onConnected as any);
     return () => { room.off(RoomEvent.ConnectionStateChanged, onState); };
+  }, [room]);
+  // participants count for chat header
+  useEffect(() => {
+    if (!room) return;
+    const compute = () => {
+      try {
+        const p: any = (room as any)?.participants; let n = 1;
+        if (p) { if (typeof p.size === 'number') n += p.size; else if (Array.isArray(p)) n += p.length; }
+        setParticipantsCount(n);
+      } catch {}
+    };
+    compute();
+    const onJoin = () => compute();
+    const onLeaveP = () => compute();
+    (room as any)?.on?.(RoomEvent.ParticipantConnected, onJoin);
+    (room as any)?.on?.(RoomEvent.ParticipantDisconnected, onLeaveP);
+    return () => {
+      (room as any)?.off?.(RoomEvent.ParticipantConnected, onJoin);
+      (room as any)?.off?.(RoomEvent.ParticipantDisconnected, onLeaveP);
+    };
   }, [room]);
   useEffect(() => {
     if (!room) return;
@@ -248,33 +274,45 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
       <div className="topbar" style={{ position: 'sticky', top: 8, zIndex: 10 }}>
         <div className="row" style={{ gap: 8, minWidth: 0 }}>
           <div className={`status-dot ${connState === ConnectionState.Connected ? 'status-connected' : connState === ConnectionState.Reconnecting ? 'status-reconnecting' : 'status-disconnected'}`} />
-          <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>
             {roomName || (room as any)?.name}
           </div>
         </div>
-        <div className="row" style={{ gap: 8, alignItems: 'center' }}>
-          <div className="muted">👁 <span className={`count ${bumpLike || bumpGift ? 'bump' : ''}`}>{viewerCount}</span></div>
+        <div className="row controls" style={{ gap: 8, alignItems: 'center' }}>
           {(isHost || role === "host") && (
             <>
               <TrackToggle source={Track.Source.Microphone} />
-              <MediaDeviceMenu
-                kind="audioinput"
-                title="マイク選択"
-                onActiveDeviceChange={(_kind, deviceId) => {
-                  const id = deviceId ?? "default";
-                  saveAudioInputDeviceId(id);
-                  try { (room as any)?.switchActiveDevice?.("audioinput", id); } catch {}
-                }}
-              >マイク選択</MediaDeviceMenu>
+              <button className="btn secondary" onClick={async () => { setShowDeviceModal(true); try { setDeviceLoading(true); setDeviceError(null); let list = await navigator.mediaDevices.enumerateDevices(); if (!list.some(d=>d.label)) { try { const s = await navigator.mediaDevices.getUserMedia({ audio:true }); s.getTracks().forEach(t=>t.stop()); list = await navigator.mediaDevices.enumerateDevices(); } catch {} } setDevices(list.filter(d=>d.kind==='audioinput') as MediaDeviceInfo[]); } catch { setDeviceError('デバイスの取得に失敗しました'); } finally { setDeviceLoading(false); } }}>マイク選択</button>
+              <label className="row" style={{ gap: 6 }}>
+                <input
+                  type="checkbox"
+                  checked={!!isPublicState}
+                  onChange={async (e) => {
+                    const next = e.target.checked;
+                    setIsPublicState(next);
+                    try {
+                      const body = new URLSearchParams({ room: (roomName || (room as any)?.name) as string, isPublic: String(next) });
+                      await fetch("/api/room/set-public", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body });
+                    } catch {}
+                  }}
+                />
+                <span style={{ fontSize: 12 }}>一覧に公開</span>
+              </label>
             </>
           )}
-          <button className="btn secondary" onClick={leaveRoom}>退出</button>
+          <button className="btn secondary" onClick={leaveRoom}>{(isHost || role === 'host') ? '配信終了' : '退出'}</button>
         </div>
       </div>
 
       <div className="stack">
         <div style={{ flex: 1 }} className="card">
-          <h3>チャット</h3>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ margin: 0, textAlign: 'left' }}>チャット</h3>
+            <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+              <div className="muted">視聴者数 <span className={`count ${bumpLike || bumpGift ? 'bump' : ''}`}>{viewerCount}</span></div>
+              <button className="btn secondary" onClick={() => setShowParticipants(true)}>視聴者 ({participantsCount})</button>
+            </div>
+          </div>
           <Chat room={room} />
         </div>
         <div style={{ minWidth: 300 }} className="card">
@@ -330,33 +368,49 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
               }}
             >🎁 {reactions.gift || 0}</button>
           </div>
-          {(isHost || role === "host") && (
-            <label className="row" style={{ gap: 6, marginBottom: 8 }}>
-              <input
-                type="checkbox"
-                checked={!!isPublicState}
-                onChange={async (e) => {
-                  const next = e.target.checked;
-                  setIsPublicState(next);
-                  try {
-                    const body = new URLSearchParams({ room: (roomName || (room as any)?.name) as string, isPublic: String(next) });
-                    await fetch("/api/room/set-public", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                      body,
-                    });
-                  } catch {}
-                }}
-              />
-              ルームを一覧に公開
-            </label>
-          )}
+          {/* 公開トグルはトップバーに移動 */}
           {/* controls moved to top bar */}
         </div>
-        <div style={{ minWidth: 360 }} className="card">
-          <h3>参加者</h3>
-          <Participants room={room} isHost={isHost || role === "host"} />
-        </div>
+        {showParticipants && (
+          <div role="dialog" aria-modal="true" className="modal-overlay" onClick={() => setShowParticipants(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 50 }}>
+            <div className="card" onClick={(e)=>e.stopPropagation()} style={{ width: 'min(90vw, 720px)', maxHeight: '80vh', overflow: 'auto' }}>
+              <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <h3 style={{ margin: 0, textAlign: 'left' }}>視聴者</h3>
+                <button className="btn secondary" onClick={() => setShowParticipants(false)}>閉じる</button>
+              </div>
+              <Participants room={room} isHost={isHost || role === "host"} />
+            </div>
+          </div>
+        )}
+        {showDeviceModal && (
+          <div role="dialog" aria-modal="true" className="modal-overlay" onClick={() => setShowDeviceModal(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', display:'flex', justifyContent:'center', alignItems:'center', zIndex:60 }}>
+            <div className="card" onClick={(e)=>e.stopPropagation()} style={{ width: 'min(90vw, 560px)', maxHeight: '80vh', overflow:'auto' }}>
+              <div className="row" style={{ justifyContent:'space-between', alignItems:'center', marginBottom: 8 }}>
+                <h3 style={{ margin:0, textAlign:'left' }}>マイク選択</h3>
+                <button className="btn secondary" onClick={() => setShowDeviceModal(false)}>閉じる</button>
+              </div>
+              {deviceError && <div className="card" style={{ borderColor:'var(--danger)', color:'var(--danger)', marginBottom:8 }}>{deviceError}</div>}
+              {deviceLoading ? (
+                <div className="muted">読み込み中…</div>
+              ) : (
+                <div className="col" style={{ gap: 8 }}>
+                  {devices.length === 0 && <div className="muted">マイクが見つかりませんでした。</div>}
+                  {devices.map((d) => (
+                    <button key={d.deviceId} className="btn secondary" style={{ justifyContent:'space-between' }} onClick={async () => {
+                      const id = d.deviceId || 'default';
+                      saveAudioInputDeviceId(id);
+                      try { await (room as any)?.switchActiveDevice?.('audioinput', id); } catch {}
+                      setShowDeviceModal(false);
+                    }}>
+                      <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'70%' }}>{d.label || 'マイク'}</span>
+                      <span className="muted" style={{ fontSize:12 }}>選択</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
       {/* reaction float overlay */}
       <div className="reactions-overlay" style={{ position: 'fixed', right: 24, bottom: 80, pointerEvents: 'none' }}>
@@ -585,7 +639,7 @@ export default function HomePage() {
                       <span className="badge-live"><span className="dot" style={{ color: 'white' }}></span>LIVE</span>
                     </div>
                     <div className="row-bottom">
-                      <div className="muted">👁 {r.viewers}</div>
+                      <div className="muted">視聴者数 {r.viewers}</div>
                       <button className="btn" onClick={() => { window.location.assign(`/room/${encodeURIComponent(r.name)}?publish=false`); }}>視聴する</button>
                     </div>
                   </div>

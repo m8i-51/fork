@@ -127,6 +127,14 @@ h3 { margin: 0 0 12px 0; padding-bottom: 8px; border-bottom: 1px solid var(--bor
     justify-content: space-between; 
     min-width: 0; 
   }
+  /* allow controls to wrap on small screens */
+  .topbar .controls {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+  .topbar .controls > * {
+    flex: 0 0 auto;
+  }
   
   /* Mobile-friendly chat */
   .chat { height: 300px; }
