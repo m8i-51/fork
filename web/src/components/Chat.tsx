@@ -116,7 +116,7 @@ export function Chat({ room }: { room: Room | undefined }) {
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKey}
         />
-        <button className="btn" onClick={send}>✈ 送信</button>
+        <button className="btn" style={{ marginTop: 8 }} onClick={send}>✈ 送信</button>
       </div>
     </div>
   );

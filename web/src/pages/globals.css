@@ -127,6 +127,11 @@ h3 { margin: 0 0 12px 0; padding-bottom: 8px; border-bottom: 1px solid var(--bor
     justify-content: space-between; 
     min-width: 0; 
   }
+  /* Keep title row left-aligned on mobile */
+  .topbar .row:not(.controls) {
+    justify-content: flex-start;
+    gap: 8px;
+  }
   /* allow controls to wrap on small screens */
   .topbar .controls {
     flex-wrap: wrap;
