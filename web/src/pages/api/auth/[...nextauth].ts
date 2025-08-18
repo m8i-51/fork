@@ -15,7 +15,7 @@ export const authOptions: NextAuthOptions = {
       version: "2.0",
       authorization: {
         params: {
-          // Twitterのユーザー情報取得には tweet.read も要求される場合がある
+          // Xのユーザー情報取得には tweet.read も要求される場合がある
           scope: "tweet.read users.read",
         },
       },

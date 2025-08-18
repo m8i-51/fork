@@ -591,7 +591,7 @@ export default function HomePage() {
             <div>サインインして開始</div>
             <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
               <button className="btn" onClick={() => signIn("google", { callbackUrl: typeof window !== 'undefined' ? window.location.href : undefined })}>Googleでサインイン</button>
-              <button className="btn" onClick={() => signIn("twitter", { callbackUrl: typeof window !== 'undefined' ? window.location.href : undefined })}>Twitterでサインイン</button>
+              <button className="btn" onClick={() => signIn("twitter", { callbackUrl: typeof window !== 'undefined' ? window.location.href : undefined })}>Xでサインイン</button>
             </div>
           </div>
         ) : (

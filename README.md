@@ -2,7 +2,7 @@
 
 音声ライブ配信の最小実装。本プロジェクト名は「fork」です。
 
-- 技術スタック: Next.js + NextAuth(Google/Twitter) + LiveKit(JS SDK) + Prisma(PostgreSQL)
+- 技術スタック: Next.js + NextAuth(Google/X) + LiveKit(JS SDK) + Prisma(PostgreSQL)
 - 主な機能: 認証、ルーム作成/入室、音声配信/視聴、チャット、視聴者数（SSE）、リアクション（👍/🎁）、監視ページ
 - スケール前提: 同時視聴 数十人（SFU: LiveKit自前ホストで低コスト運用可能）
 
@@ -32,7 +32,7 @@ npm run dev
 
 3) 動作確認（ロビー→ルームへ）
 
-- ブラウザで `http://localhost:3001` を開き、Google/Twitterでサインイン
+- ブラウザで `http://localhost:3001` を開き、Google/Xでサインイン
 - ロビー（トップ）
   - 公開中ルームの一覧カード（LIVEバッジ/視聴者数/視聴ボタン）
   - 既存ルームに入室: ルームID（URLの末尾、slug）を入力→入室
@@ -87,8 +87,8 @@ Tips
 ## OAuthコールバックURL（ローカル・ポート3001）
 
 - Google: `http://localhost:3001/api/auth/callback/google`
-- Twitter: `http://localhost:3001/api/auth/callback/twitter`
-- 注意: Twitterの「Website URL」はlocalhost不可。公開httpsページ（例: GitHubリポジトリURL）を設定してください。
+- X: `http://localhost:3001/api/auth/callback/twitter`
+- 注意: Xの「Website URL」はlocalhost不可。公開httpsページ（例: GitHubリポジトリURL）を設定してください。
 
 ## Makefile（便利コマンド）
 
@@ -118,10 +118,10 @@ Vercel（Web）+ Supabase（Postgres）+ LiveKit Cloud（無料開発枠）で�
   - 重要: 既存の `web/prisma/migrations` はSQLite由来のため、PostgreSQLではそのまま適用できません。初回は本番DBで `npx prisma db push` を実行してテーブルを作成してください（VercelのBuild Stepに追加 or デプロイ後に手動）。
 - LiveKit Cloud（配信基盤）
   - Project作成→ `WSS URL` / `API_KEY` / `API_SECRET` を発行し、Vercelの環境変数へ
-- OAuth（Google/Twitter）
+- OAuth（Google/X）
   - Callback URL をVercelの本番ドメインへ更新
     - Google: `https://<your-domain>/api/auth/callback/google`
-    - Twitter: `https://<your-domain>/api/auth/callback/twitter`
+    - X: `https://<your-domain>/api/auth/callback/twitter`
 
 Prisma 運用メモ
 - スキーマ: `web/prisma/schema.prisma`（provider=postgresql）
