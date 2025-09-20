@@ -21,7 +21,7 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
   const leaveRoom = async () => {
     try {
       await room?.disconnect?.();
-    } catch {}
+    } catch { }
     onLeave();
   };
   const [audioReady, setAudioReady] = useState(false);
@@ -44,13 +44,13 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
   const [deviceLoading, setDeviceLoading] = useState(false);
   const [deviceError, setDeviceError] = useState<string | null>(null);
   const saveAudioInputDeviceId = (deviceId: string) => {
-    try { localStorage.setItem("audioinputDeviceId", deviceId); } catch {}
+    try { localStorage.setItem("audioinputDeviceId", deviceId); } catch { }
   };
   useEffect(() => {
     try {
       const meta = room?.localParticipant?.metadata ? JSON.parse(room.localParticipant.metadata) : {};
       if (meta?.role === "host" || meta?.role === "viewer") setRole(meta.role);
-    } catch {}
+    } catch { }
   }, [room]);
 
   useEffect(() => {
@@ -75,7 +75,7 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
         const p: any = (room as any)?.participants; let n = 1;
         if (p) { if (typeof p.size === 'number') n += p.size; else if (Array.isArray(p)) n += p.length; }
         setParticipantsCount(n);
-      } catch {}
+      } catch { }
     };
     compute();
     const onJoin = () => compute();
@@ -94,7 +94,7 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
       if (saved) {
         (room as any)?.switchActiveDevice?.("audioinput", saved);
       }
-    } catch {}
+    } catch { }
   }, [room]);
   useEffect(() => {
     if (!room) return;
@@ -104,11 +104,11 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
         const isHostSender = meta?.role === "host";
         const iAmHost = isHost || role === "host";
         if (isHostSender && !iAmHost) {
-          room.disconnect().catch(() => {});
+          room.disconnect().catch(() => { });
           alert("配信が終了しました");
           onLeave();
         }
-      } catch {}
+      } catch { }
     };
     room.on(RoomEvent.ParticipantDisconnected, onParticipantDisconnected);
     return () => {
@@ -127,10 +127,10 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
           try {
             const meta = participant?.metadata ? JSON.parse(participant.metadata) : {};
             isHostSender = meta?.role === "host";
-          } catch {}
+          } catch { }
           if (!isHostSender) return;
           if (msg?.type === "kick" && msg?.target && room.localParticipant?.identity === msg.target) {
-            room.disconnect().catch(() => {});
+            room.disconnect().catch(() => { });
             alert("ホストによって退室させられました");
           }
         } else if (topic === "reaction" && msg?.type) {
@@ -138,7 +138,7 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
           triggerBump(msg.type);
           spawnFloat(msg.type);
         }
-      } catch {}
+      } catch { }
     };
     room.on("dataReceived" as any, onData);
     return () => {
@@ -159,7 +159,7 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
           const j = await r.json();
           if (typeof j.isPublic === "boolean") setIsPublicState(j.isPublic);
         }
-      } catch {}
+      } catch { }
     })();
     // fetch reaction summary
     (async () => {
@@ -169,7 +169,7 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
           const j = await r.json();
           if (j?.summary) setReactions((prev) => ({ ...prev, ...j.summary }));
         }
-      } catch {}
+      } catch { }
     })();
     const sendHeartbeat = async () => {
       try {
@@ -179,7 +179,7 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body,
         });
-      } catch {}
+      } catch { }
     };
     void sendHeartbeat();
     presenceTimer.current = setInterval(sendHeartbeat, 20000);
@@ -193,13 +193,13 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
         try {
           const data = JSON.parse(ev.data);
           if (typeof data.viewers === "number") setViewerCount(data.viewers);
-        } catch {}
+        } catch { }
       };
       es.onerror = () => {
         // will fall back to polling below
-        try { es?.close(); } catch {}
+        try { es?.close(); } catch { }
       };
-    } catch {}
+    } catch { }
 
     const fetchViewers = async () => {
       if (es) return; // if SSE active, skip polling
@@ -210,7 +210,7 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
         const j = await r.json();
         const me = j.rooms?.find?.((x: any) => x.name === rn);
         if (me) setViewerCount(me.viewers || 0);
-      } catch {}
+      } catch { }
     };
     void fetchViewers();
     viewerTimer.current = setInterval(fetchViewers, 5000);
@@ -219,14 +219,14 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
       try {
         const body = new URLSearchParams({ room: rn });
         await fetch("/api/presence/leave", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body });
-      } catch {}
+      } catch { }
     };
     const onBeforeUnload = () => { void leave(); };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => {
       if (presenceTimer.current) clearInterval(presenceTimer.current);
       if (viewerTimer.current) clearInterval(viewerTimer.current);
-      try { es?.close(); } catch {}
+      try { es?.close(); } catch { }
       window.removeEventListener("beforeunload", onBeforeUnload);
       void leave();
     };
@@ -282,7 +282,7 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
           {(isHost || role === "host") && (
             <>
               <TrackToggle source={Track.Source.Microphone} />
-              <button className="btn secondary" onClick={async () => { setShowDeviceModal(true); try { setDeviceLoading(true); setDeviceError(null); let list = await navigator.mediaDevices.enumerateDevices(); if (!list.some(d=>d.label)) { try { const s = await navigator.mediaDevices.getUserMedia({ audio:true }); s.getTracks().forEach(t=>t.stop()); list = await navigator.mediaDevices.enumerateDevices(); } catch {} } setDevices(list.filter(d=>d.kind==='audioinput') as MediaDeviceInfo[]); } catch { setDeviceError('デバイスの取得に失敗しました'); } finally { setDeviceLoading(false); } }}>マイク選択</button>
+              <button className="btn secondary" onClick={async () => { setShowDeviceModal(true); try { setDeviceLoading(true); setDeviceError(null); let list = await navigator.mediaDevices.enumerateDevices(); if (!list.some(d => d.label)) { try { const s = await navigator.mediaDevices.getUserMedia({ audio: true }); s.getTracks().forEach(t => t.stop()); list = await navigator.mediaDevices.enumerateDevices(); } catch { } } setDevices(list.filter(d => d.kind === 'audioinput') as MediaDeviceInfo[]); } catch { setDeviceError('デバイスの取得に失敗しました'); } finally { setDeviceLoading(false); } }}>マイク選択</button>
               <label className="row" style={{ gap: 6 }}>
                 <input
                   type="checkbox"
@@ -293,7 +293,7 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
                     try {
                       const body = new URLSearchParams({ room: (roomName || (room as any)?.name) as string, isPublic: String(next) });
                       await fetch("/api/room/set-public", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body });
-                    } catch {}
+                    } catch { }
                   }}
                 />
                 <span style={{ fontSize: 12 }}>一覧に公開</span>
@@ -332,7 +332,7 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
                 try {
                   const payload = { type: "like" };
                   await (room as any)?.localParticipant?.publishData?.(new TextEncoder().encode(JSON.stringify(payload)), { reliable: false, topic: "reaction" } as any);
-                } catch {}
+                } catch { }
                 try {
                   const body = new URLSearchParams({ room: (roomName || (room as any)?.name) as string, type: "like" });
                   await fetch("/api/reaction/send", {
@@ -340,7 +340,7 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
                     headers: { "Content-Type": "application/x-www-form-urlencoded" },
                     body,
                   });
-                } catch {}
+                } catch { }
               }}
             >👍 {reactions.like || 0}</button>
             <button
@@ -356,7 +356,7 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
                 try {
                   const payload = { type: "gift" };
                   await (room as any)?.localParticipant?.publishData?.(new TextEncoder().encode(JSON.stringify(payload)), { reliable: false, topic: "reaction" } as any);
-                } catch {}
+                } catch { }
                 try {
                   const body = new URLSearchParams({ room: (roomName || (room as any)?.name) as string, type: "gift" });
                   await fetch("/api/reaction/send", {
@@ -364,7 +364,7 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
                     headers: { "Content-Type": "application/x-www-form-urlencoded" },
                     body,
                   });
-                } catch {}
+                } catch { }
               }}
             >🎁 {reactions.gift || 0}</button>
           </div>
@@ -373,7 +373,7 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
         </div>
         {showParticipants && (
           <div role="dialog" aria-modal="true" className="modal-overlay" onClick={() => setShowParticipants(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 50 }}>
-            <div className="card" onClick={(e)=>e.stopPropagation()} style={{ width: 'min(90vw, 720px)', maxHeight: '80vh', overflow: 'auto' }}>
+            <div className="card" onClick={(e) => e.stopPropagation()} style={{ width: 'min(90vw, 720px)', maxHeight: '80vh', overflow: 'auto' }}>
               <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                 <h3 style={{ margin: 0, textAlign: 'left' }}>視聴者</h3>
                 <button className="btn secondary" onClick={() => setShowParticipants(false)}>閉じる</button>
@@ -383,27 +383,27 @@ function InRoomUI({ onLeave, onRejoin, isHost, roomName }: { onLeave: () => void
           </div>
         )}
         {showDeviceModal && (
-          <div role="dialog" aria-modal="true" className="modal-overlay" onClick={() => setShowDeviceModal(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', display:'flex', justifyContent:'center', alignItems:'center', zIndex:60 }}>
-            <div className="card" onClick={(e)=>e.stopPropagation()} style={{ width: 'min(90vw, 560px)', maxHeight: '80vh', overflow:'auto' }}>
-              <div className="row" style={{ justifyContent:'space-between', alignItems:'center', marginBottom: 8 }}>
-                <h3 style={{ margin:0, textAlign:'left' }}>マイク選択</h3>
+          <div role="dialog" aria-modal="true" className="modal-overlay" onClick={() => setShowDeviceModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 60 }}>
+            <div className="card" onClick={(e) => e.stopPropagation()} style={{ width: 'min(90vw, 560px)', maxHeight: '80vh', overflow: 'auto' }}>
+              <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <h3 style={{ margin: 0, textAlign: 'left' }}>マイク選択</h3>
                 <button className="btn secondary" onClick={() => setShowDeviceModal(false)}>閉じる</button>
               </div>
-              {deviceError && <div className="card" style={{ borderColor:'var(--danger)', color:'var(--danger)', marginBottom:8 }}>{deviceError}</div>}
+              {deviceError && <div className="card" style={{ borderColor: 'var(--danger)', color: 'var(--danger)', marginBottom: 8 }}>{deviceError}</div>}
               {deviceLoading ? (
                 <div className="muted">読み込み中…</div>
               ) : (
                 <div className="col" style={{ gap: 8 }}>
                   {devices.length === 0 && <div className="muted">マイクが見つかりませんでした。</div>}
                   {devices.map((d) => (
-                    <button key={d.deviceId} className="btn secondary" style={{ justifyContent:'space-between' }} onClick={async () => {
+                    <button key={d.deviceId} className="btn secondary" style={{ justifyContent: 'space-between' }} onClick={async () => {
                       const id = d.deviceId || 'default';
                       saveAudioInputDeviceId(id);
-                      try { await (room as any)?.switchActiveDevice?.('audioinput', id); } catch {}
+                      try { await (room as any)?.switchActiveDevice?.('audioinput', id); } catch { }
                       setShowDeviceModal(false);
                     }}>
-                      <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'70%' }}>{d.label || 'マイク'}</span>
-                      <span className="muted" style={{ fontSize:12 }}>選択</span>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>{d.label || 'マイク'}</span>
+                      <span className="muted" style={{ fontSize: 12 }}>選択</span>
                     </button>
                   ))}
                 </div>
@@ -475,7 +475,7 @@ export default function HomePage() {
           if (typeof window !== 'undefined') {
             await signIn(undefined, { callbackUrl: window.location.href });
           }
-        } catch {}
+        } catch { }
       } else if (res.status === 403) {
         setJoinError("このルームからBANされています。");
       } else {
@@ -522,7 +522,7 @@ export default function HomePage() {
         const arr = (j.rooms || []).map((x: any) => ({ name: x.name, viewers: x.viewers, displayName: x.displayName }));
         arr.sort((a: any, b: any) => (b.viewers || 0) - (a.viewers || 0));
         setPublicRooms(arr);
-      } catch {}
+      } catch { }
     };
     void fetchRooms();
     if (publicRoomsTimer.current) clearInterval(publicRoomsTimer.current);
@@ -579,7 +579,7 @@ export default function HomePage() {
           tokenRefreshTimer.current = setTimeout(() => { void refreshToken(); }, ms);
         }
       }
-    } catch {}
+    } catch { }
   };
 
   return (
@@ -603,7 +603,17 @@ export default function HomePage() {
       </div>
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="row" style={{ marginTop: 8, flexWrap: 'wrap', gap: 8 }}>
-          <input className="input" placeholder="配信タイトル" required value={createName} onChange={(e) => setCreateName(e.target.value)} style={{ flex: 1, minWidth: 0 }} />
+          <label htmlFor="create-name" className="sr-only">配信タイトル</label>
+          <input
+            id="create-name"
+            className="input"
+            placeholder="配信タイトル"
+            aria-label="配信タイトル"
+            required
+            value={createName}
+            onChange={(e) => setCreateName(e.target.value)}
+            style={{ flex: 1, minWidth: 0 }}
+          />
           <button className="btn" disabled={status !== "authenticated" || !isValidDisplayName(createName)} onClick={async () => {
             const dn = normalizeDisplayName(createName);
             if (!isValidDisplayName(dn)) { alert('表示名が不正です（1〜32文字、絵文字・特殊記号不可）'); return; }

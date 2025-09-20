@@ -11,10 +11,14 @@ export default function MyApp({ Component, pageProps: { session, ...pageProps } 
   return (
     <SessionProvider session={session}>
       <Head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <title>fork - Live Audio MVP</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="description" content="音声ライブ配信の最小実装" />
         <link rel="stylesheet" href="https://unpkg.com/@livekit/components-styles@latest/dist/styles.css" />
       </Head>
-      <Component {...pageProps} />
+      <main>
+        <Component {...pageProps} />
+      </main>
       <Analytics />
       <SpeedInsights />
     </SessionProvider>

@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: web/package-lock.json
+
+    - name: Install dependencies
+      working-directory: ./web
+      run: npm ci
+
+    - name: Type check
+      working-directory: ./web
+      run: npm run typecheck
+
+    - name: Build application
+      working-directory: ./web
+      run: npm run build
+      env:
+        NEXTAUTH_URL: http://localhost:3001
+        NEXTAUTH_SECRET: test-secret-key-for-ci
+        GOOGLE_CLIENT_ID: test-google-client-id
+        GOOGLE_CLIENT_SECRET: test-google-client-secret
+        TWITTER_CLIENT_ID: test-twitter-client-id
+        TWITTER_CLIENT_SECRET: test-twitter-client-secret
+        LIVEKIT_API_KEY: devkey
+        LIVEKIT_API_SECRET: devsecret
+        NEXT_PUBLIC_LIVEKIT_WS_URL: ws://localhost:7880
+        DATABASE_URL: file:./prisma/dev.db
