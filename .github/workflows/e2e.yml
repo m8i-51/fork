@@ -34,6 +34,9 @@ jobs:
       run: |
         npx prisma generate
         npx prisma db push
+      env:
+        DATABASE_URL: file:./prisma/dev.db
+        DIRECT_URL: file:./prisma/dev.db
 
     - name: Start LiveKit server
       run: |
@@ -55,6 +58,7 @@ jobs:
         LIVEKIT_API_SECRET: devsecret
         NEXT_PUBLIC_LIVEKIT_WS_URL: ws://localhost:7880
         DATABASE_URL: file:./prisma/dev.db
+        DIRECT_URL: file:./prisma/dev.db
 
     - name: Upload test results
       uses: actions/upload-artifact@v4
