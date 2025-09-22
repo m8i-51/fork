@@ -11,7 +11,7 @@ test.describe('SSEストリーム', () => {
             expect(res.headers()['content-type']).toContain('text/event-stream');
         } catch (error) {
             // タイムアウトは正常（SSEストリームの特性）
-            expect(error.message).toContain('Timeout');
+            expect(error instanceof Error && error.message).toContain('Timeout');
         }
     });
 
