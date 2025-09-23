@@ -41,8 +41,10 @@ jobs:
     - name: Start LiveKit server
       run: |
         cd livekit
-        docker-compose up -d
-        sleep 10
+        docker compose up -d
+        sleep 15
+        # ヘルスチェック
+        curl -f http://localhost:7880/ || exit 1
 
     - name: Run E2E tests
       working-directory: ./web
@@ -71,4 +73,4 @@ jobs:
       if: always()
       run: |
         cd livekit
-        docker-compose down
+        docker compose down
