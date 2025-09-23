@@ -5,7 +5,11 @@ export default defineConfig({
   timeout: 30_000,
   expect: { timeout: 5_000 },
   fullyParallel: true,
-  reporter: 'list',
+  reporter: [
+    ['list'],
+    ['html', { outputFolder: 'test-results/html-report' }],
+    ['json', { outputFile: 'test-results/results.json' }]
+  ],
   use: {
     baseURL: 'http://localhost:3001',
     trace: 'on-first-retry',
