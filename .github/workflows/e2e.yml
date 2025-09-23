@@ -34,12 +34,17 @@ jobs:
       run: |
         npx prisma generate
         npx prisma db push
+      env:
+        DATABASE_URL: file:./prisma/dev.db
+        DIRECT_URL: file:./prisma/dev.db
 
     - name: Start LiveKit server
       run: |
         cd livekit
-        docker-compose up -d
-        sleep 10
+        docker compose up -d
+        sleep 15
+        # ヘルスチェック
+        curl -f http://localhost:7880/ || exit 1
 
     - name: Run E2E tests
       working-directory: ./web
@@ -55,10 +60,27 @@ jobs:
         LIVEKIT_API_SECRET: devsecret
         NEXT_PUBLIC_LIVEKIT_WS_URL: ws://localhost:7880
         DATABASE_URL: file:./prisma/dev.db
+        DIRECT_URL: file:./prisma/dev.db
+
+    - name: Show test results summary
+      if: always()
+      working-directory: ./web
+      run: |
+        echo "=== Test Results Summary ==="
+        if [ -d "test-results" ]; then
+          echo "Test results directory exists"
+          ls -la test-results/
+          if [ -f "test-results/results.json" ]; then
+            echo "JSON results found"
+            cat test-results/results.json | jq '.stats' 2>/dev/null || echo "Could not parse JSON results"
+          fi
+        else
+          echo "No test results directory found"
+        fi
 
     - name: Upload test results
       uses: actions/upload-artifact@v4
-      if: failure()
+      if: always()
       with:
         name: playwright-report
         path: web/test-results/
@@ -67,4 +89,4 @@ jobs:
       if: always()
       run: |
         cd livekit
-        docker-compose down
+        docker compose down
