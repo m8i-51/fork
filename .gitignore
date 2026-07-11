@@ -13,32 +13,19 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Node/Next.js
+# Node
 node_modules/
-.next/
-out/
 coverage/
 *.tsbuildinfo
+dist/
 
-# Web app (web/)
-web/node_modules/
-web/.next/
-web/out/
-web/.turbo/
-web/.vercel/
+# Cloudflare
+.wrangler/
 
 # Environment files
 .env
 .env.*
-!/.env.example
-web/.env
-web/.env.local
-web/.env.*.local
-!web/.env.local.example
+!.env.example
 
-# Prisma (SQLite dev DB)
-web/prisma/dev.db
-web/prisma/dev.db-shm
-web/prisma/dev.db-wal
-web/prisma/dev.db-journal
-
+# Build outputs
+app/dist/

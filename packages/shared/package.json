@@ -1,0 +1,11 @@
+{
+  "name": "@fork/shared",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/validation.ts",
+  "types": "./src/validation.ts",
+  "exports": {
+    ".": "./src/validation.ts"
+  }
+}

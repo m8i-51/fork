@@ -1,12 +1,15 @@
 SHELL := /bin/bash
 
-.PHONY: livekit-up livekit-down web-dev
+.PHONY: dev build deploy test
 
-livekit-up:
-	cd livekit && docker compose up -d
+dev:
+	npm run dev
 
-livekit-down:
-	cd livekit && docker compose down
+build:
+	npm run build:app
 
-web-dev:
-	cd web && npm install && npm run dev
+deploy:
+	npm run deploy
+
+test:
+	npm run typecheck && npm run test

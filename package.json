@@ -1,0 +1,23 @@
+{
+  "name": "fork",
+  "private": true,
+  "workspaces": [
+    "app",
+    "worker",
+    "packages/shared"
+  ],
+  "scripts": {
+    "dev": "npm run build -w app && wrangler dev",
+    "build:app": "npm run build -w app",
+    "deploy": "npm run build:app && wrangler deploy",
+    "typecheck": "npm run typecheck -w app && npm run typecheck -w worker",
+    "test": "npm run test -w worker",
+    "e2e": "playwright test -c app/playwright.config.ts"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.8.19",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5",
+    "wrangler": "^4.14.0"
+  }
+}
