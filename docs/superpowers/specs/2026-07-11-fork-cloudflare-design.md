@@ -1,7 +1,8 @@
 # fork — Cloudflare 無料枠 β版 設計書
 
 > 作成日: 2026-07-11  
-> ステータス: Draft（レビュー待ち）
+> 更新日: 2026-07-11  
+> ステータス: Approved
 
 ## 1. 目的
 
@@ -54,19 +55,19 @@ Browser ──WebRTC──► LiveKit (自前 Docker)
 
 ```
 Browser ──WebRTC──► Cloudflare Realtime SFU (+ TURN 内包)
-       ──HTTP────► Workers (Hono)
+       ──HTTP────► Workers (Hono) — API + OAuth + SFU トークン
        ──WS──────► Durable Objects (RoomDO: 視聴者数・チャット)
-       ──Static──► Cloudflare Pages (Next.js via OpenNext)
+       ──Static──► Workers Static Assets (Vite + React SPA)
        ──SQL─────► D1
-       ──Cache───► Workers KV (ルーム一覧・レートリミット)
-       ──Cron────► Workers Cron (Presence 整理・host 解放)
+       ──Cache───► Workers KV (セッション・ルーム一覧・レートリミット)
+       ──Cron────► Workers Cron (host 解放・KV warm)
 ```
 
 | 長所 | 短所 |
 |------|------|
-| 無料枠内で完結 | LiveKit → SFU へのクライアント/API 全面差し替え |
-| グローバル edge | Next.js edge 移行の学習コスト |
-| TURN 込みで NAT 越え | Prisma 不可 → Drizzle + D1 |
+| 無料枠内で完結 | Next.js / LiveKit / Prisma を全廃（破壊的変更） |
+| 単一 Worker で API + 静的配信 | 既存 Playwright テストの書き換えが必要 |
+| TURN 込みで NAT 越え | Drizzle + D1 へ ORM 移行 |
 
 ### 案 B: ハイブリッド（Next.js 温存）
 
@@ -94,15 +95,15 @@ API/DB は現状維持、メディアだけ Realtime SFU。
 ```mermaid
 flowchart TB
   subgraph Client
-    UI[Pages: Next.js UI]
+    UI[Vite React SPA]
     RTC[WebRTC Client]
   end
 
   subgraph Cloudflare
-    WK[Workers API]
+    WK[Worker: Hono API + Static Assets]
     DO[RoomDO per slug]
     D1[(D1)]
-    KV[(KV Cache)]
+    KV[(KV: session / cache / rate-limit)]
     SFU[Realtime SFU]
     CRON[Cron Trigger]
   end
@@ -122,8 +123,8 @@ flowchart TB
 
 | コンポーネント | 責務 |
 |----------------|------|
-| **Pages** | ロビー・ルーム UI。認証セッション Cookie |
-| **Workers API** | OAuth、ルーム CRUD、SFU セッション発行、BAN、リアクション集計 |
+| **Worker + Static Assets** | `/api/*` は Hono、`/*` は SPA fallback。同一オリジン |
+| **Workers API (Hono)** | OAuth、ルーム CRUD、SFU セッション発行、BAN、リアクション集計 |
 | **RoomDO** | ルーム単位の WebSocket（視聴者数 push）、直近チャット 200 件、ホスト online 状態 |
 | **D1** | Room / Ban / ReactionAggregate（永続） |
 | **KV** | 公開ルーム一覧キャッシュ（TTL 15s）、API レートリミット |
@@ -212,7 +213,10 @@ CREATE TABLE admin_users (
 
 | Method | Path | 説明 |
 |--------|------|------|
-| GET | `/api/auth/*` | OAuth (Google/X) via Auth.js |
+| GET | `/api/auth/:provider` | OAuth 開始 (Google/X) — Arctic |
+| GET | `/api/auth/:provider/callback` | OAuth コールバック → KV セッション |
+| POST | `/api/auth/logout` | セッション削除 |
+| GET | `/api/auth/me` | 現在ユーザー |
 | POST | `/api/room/create` | ルーム作成 |
 | GET | `/api/room/list` | 公開ルーム（KV キャッシュ） |
 | GET | `/api/room/info` | ルームメタ |
@@ -242,9 +246,9 @@ CREATE TABLE admin_users (
 | リスク | 緩和 |
 |--------|------|
 | SFU API 複雑度 | 公式 example-architecture ベースの `sfu-client` モジュールに集約 |
-| Next.js on CF 制限 | OpenNext adapter。API Routes は Workers へ移行 |
+| Next.js 全廃 | Vite SPA + Workers Static Assets。段階移行せず一括置換 |
 | DO duration 課金 | Hibernation API + ping 間隔 30s |
-| OAuth on Workers | Auth.js `@auth/core` + D1 session store |
+| OAuth on Workers | Arctic + KV セッション + httpOnly Cookie |
 | 帯域超過 | ルーム人数上限 30、管理画面で egress 概算表示 |
 
 ---
@@ -252,15 +256,67 @@ CREATE TABLE admin_users (
 ## 10. テスト方針
 
 - **Unit**: Vitest + `@cloudflare/vitest-pool-workers`（Workers/DO）
-- **E2E**: 既存 Playwright を SFU mock / staging CF 環境向けに更新
+- **E2E**: Playwright を Vite SPA + staging Worker 向けに書き直し（`app/e2e/`）
 - **Load**: 30 仮想視聴者 WS 接続テスト（DO 上限確認）
 
 ---
 
-## 11. 未決事項（レビューで決定）
+## 11. 決定事項（2026-07-11 確定）
 
-1. UI フレームワーク: Next.js (OpenNext) 維持 vs React SPA 化
-2. 認証: Auth.js Workers vs Cloudflare Access（外部 IdP 限定）
-3. カスタムドメイン: 必須かどうか
+破壊的変更を許容し、Cloudflare 無料枠との相性を最優先して以下を確定する。
 
-**デフォルト提案**: Next.js OpenNext 維持、Auth.js Workers、workers.dev → 後日 custom domain
+### 11.1 フロントエンド — Vite + React SPA（Next.js 全廃）
+
+| 項目 | 決定 | 理由 |
+|------|------|------|
+| フレームワーク | **Vite 6 + React 19 + TypeScript** | ビルド成果物が静的ファイルのみ。Pages / Workers Static Assets に最適 |
+| ルーティング | **TanStack Router** | 型安全。ファイルベースルートで `/`, `/room/$slug`, `/admin/monitor` |
+| 状態管理 | React hooks のみ（β では Zustand 不導入） | YAGNI |
+| 配置 | **Workers Static Assets**（`[assets]` binding） | API と SPA を同一 Worker・同一オリジン。CORS 不要 |
+| 廃止 | `web/`（Next.js Pages Router）全体 | API Routes / NextAuth / Prisma / LiveKit SDK をすべて除去 |
+
+```toml
+# wrangler.toml（抜粋）
+[assets]
+directory = "./app/dist"
+not_found_handling = "single-page-application"
+binding = "ASSETS"
+```
+
+### 11.2 認証 — Arctic + KV セッション（Cloudflare Access は不採用）
+
+| 項目 | 決定 | 理由 |
+|------|------|------|
+| OAuth ライブラリ | **[Arctic](https://arcticjs.dev/)** | Edge / Workers ネイティブ。Google・X (Twitter) 対応 |
+| セッション保存 | **Workers KV** | D1 write を消費しない。TTL 付き自動失効 |
+| Cookie | `__Host-fork-session`（httpOnly, Secure, SameSite=Lax） | セッション ID のみ。ペイロードは KV 参照 |
+| 不採用 | Cloudflare Access | Zero Trust 向け。一般ユーザー向け Google/X ログインには不向き |
+| 不採用 | Auth.js / NextAuth | Next.js 依存。Workers 単体ではオーバーヘッド大 |
+
+**セッションフロー:**
+
+```
+1. GET /api/auth/google → Arctic redirect
+2. GET /api/auth/google/callback → KV.put(sessionId, { userId, name, ... }, { expirationTtl: 604800 })
+3. Set-Cookie: __Host-fork-session=<sessionId>
+4. 以降 API は Cookie → KV lookup → identity 解決
+```
+
+### 11.3 ドメイン — β は `*.workers.dev` / `*.pages.dev`、カスタムドメインは任意
+
+| 項目 | 決定 | 理由 |
+|------|------|------|
+| β 環境 | `fork-api.<account>.workers.dev` または Pages 自動 URL | 無料・即デプロイ。OAuth callback URL をここに設定 |
+| 本番 | カスタムドメインは **Phase 3 以降**に Cloudflare DNS で追加 | β ブロッカーにしない |
+| OAuth callback | デプロイ URL に合わせて Google/X コンソールを更新 | ドメイン確定後に再設定 |
+
+### 11.4 その他の技術選定
+
+| 領域 | 決定 |
+|------|------|
+| ORM | Drizzle ORM + D1 |
+| HTTP フレームワーク | Hono |
+| テスト (Worker) | Vitest + `@cloudflare/vitest-pool-workers` |
+| テスト (UI) | Playwright（`app/e2e/` に新設） |
+| モノレポ | npm workspaces: `app/`, `worker/`, `packages/db/` |
+| CI | GitHub Actions → `wrangler deploy`（単一 Worker） |

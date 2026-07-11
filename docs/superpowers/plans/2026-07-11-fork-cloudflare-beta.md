@@ -2,51 +2,68 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** LiveKit + Vercel 依存を除去し、Cloudflare 無料枠（Pages / Workers / D1 / DO / Realtime SFU）だけで音声ライブ配信 β を運用可能にする。
+**Goal:** LiveKit + Next.js + Vercel 依存を全廃し、Cloudflare 無料枠（Workers + Static Assets / D1 / DO / KV / Realtime SFU）だけで音声ライブ配信 β を運用可能にする。
 
-**Architecture:** Next.js UI を Cloudflare Pages (OpenNext) に載せ、API・認証・SFU セッション発行を Workers + D1 で行う。ルーム単位のリアルタイム状態（視聴者数・チャット）は WebSocket Hibernation 対応の RoomDO が担当。メディアは Cloudflare Realtime SFU（月 1,000 GB 無料）。
+**Architecture:** Vite + React SPA を Workers Static Assets で配信し、同一 Worker 上の Hono が API・OAuth・SFU セッションを担当。ルーム単位のリアルタイム状態は RoomDO（WebSocket Hibernation）。認証は Arctic + KV セッション。
 
-**Tech Stack:** Cloudflare Workers, Durable Objects, D1, KV, Pages, OpenNext, Realtime SFU, Hono, Drizzle ORM, Auth.js, Vitest, Playwright
+**Tech Stack:** Cloudflare Workers, Static Assets, Durable Objects, D1, KV, Realtime SFU, Vite, React, TanStack Router, Hono, Arctic, Drizzle ORM, Vitest, Playwright
 
 **Design Spec:** `docs/superpowers/specs/2026-07-11-fork-cloudflare-design.md`
 
 ---
 
-## File Structure (新規)
+## File Structure（確定）
 
 ```
 /
-├── wrangler.toml                 # Workers + D1 + DO + KV bindings
+├── package.json                  # npm workspaces root
+├── wrangler.toml                 # Worker + D1 + DO + KV + Static Assets
 ├── worker/
 │   ├── src/
-│   │   ├── index.ts              # Hono app entry
-│   │   ├── env.ts                # Env type definitions
+│   │   ├── index.ts              # Hono app + ASSETS fallback
+│   │   ├── env.ts
+│   │   ├── middleware/
+│   │   │   └── session.ts        # KV session from cookie
 │   │   ├── routes/
-│   │   │   ├── auth.ts
+│   │   │   ├── auth.ts           # Arctic OAuth (Google/X)
 │   │   │   ├── room.ts
-│   │   │   ├── session.ts        # SFU session minting
+│   │   │   ├── session.ts
 │   │   │   ├── reaction.ts
 │   │   │   └── moderation.ts
 │   │   ├── durable-objects/
-│   │   │   └── room.ts           # RoomDO
+│   │   │   └── room.ts
 │   │   ├── lib/
-│   │   │   ├── sfu.ts            # Realtime SFU HTTPS API client
-│   │   │   ├── rate-limit.ts     # KV-based limiter
+│   │   │   ├── sfu.ts
+│   │   │   ├── rate-limit.ts
 │   │   │   └── host-lifecycle.ts
 │   │   └── cron/
 │   │       └── cleanup.ts
 │   └── test/
-│       ├── room-do.test.ts
-│       └── host-lifecycle.test.ts
-├── packages/
-│   └── db/
-│       ├── schema.ts             # Drizzle D1 schema
-│       └── migrations/
-└── web/                          # 既存 Next.js（段階的に SFU client 差し替え）
-    └── src/lib/
-        ├── sfu-client.ts         # WebRTC + SFU session helper
-        └── room-ws.ts            # RoomDO WebSocket client
+├── app/                          # Vite + React SPA（web/ を置換）
+│   ├── index.html
+│   ├── vite.config.ts
+│   ├── src/
+│   │   ├── main.tsx
+│   │   ├── routes/
+│   │   │   ├── index.tsx         # ロビー
+│   │   │   ├── room.$slug.tsx    # 配信/視聴
+│   │   │   └── admin.monitor.tsx
+│   │   ├── components/
+│   │   │   ├── Chat.tsx
+│   │   │   ├── InRoomUI.tsx
+│   │   │   └── Participants.tsx
+│   │   └── lib/
+│   │       ├── api.ts            # fetch wrapper (credentials: include)
+│   │       ├── sfu-client.ts
+│   │       └── room-ws.ts
+│   └── e2e/                      # Playwright（新設）
+└── packages/
+    └── db/
+        ├── schema.ts
+        └── migrations/
 ```
+
+**廃止:** `web/` ディレクトリ全体（Next.js, NextAuth, Prisma, LiveKit, 旧 Playwright）
 
 ---
 
@@ -87,8 +104,14 @@ new_sqlite_classes = ["RoomDO"]
 [triggers]
 crons = ["*/5 * * * *"]
 
+[assets]
+directory = "./app/dist"
+not_found_handling = "single-page-application"
+binding = "ASSETS"
+
 [vars]
 # REALTIME_APP_ID set via wrangler secret
+# OAUTH redirect base = https://fork-api.<account>.workers.dev
 ```
 
 - [ ] **Step 2: D1 データベース作成**
@@ -140,18 +163,29 @@ npx wrangler d1 execute fork --remote --file=packages/db/migrations/0001_init.sq
 npx wrangler d1 execute fork --local --file=packages/db/migrations/0001_init.sql
 ```
 
-- [ ] **Step 5: Hono エントリポイント**
+- [ ] **Step 5: Hono エントリポイント（API + SPA fallback）**
 
 `worker/src/index.ts`:
 ```typescript
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import type { Env } from "./env";
 
 const app = new Hono<{ Bindings: Env }>();
 
 app.get("/api/health", (c) => c.json({ ok: true }));
 
-export default app;
+// Phase 1+ で auth/room ルートを追加
+
+export default {
+  fetch(request: Request, env: Env, ctx: ExecutionContext): Response | Promise<Response> {
+    return app.fetch(request, env, ctx).then((res) => {
+      if (res.status !== 404) return res;
+      return env.ASSETS.fetch(request);
+    });
+  },
+  scheduled: (event, env, ctx) => { /* cron */ },
+};
 export { RoomDO } from "./durable-objects/room";
 ```
 
@@ -257,6 +291,158 @@ git commit -m "feat: add RoomDO with WebSocket hibernation skeleton"
 
 ---
 
+### Task 1B: Vite + React SPA スキャフォールド
+
+**Files:**
+- Create: `app/package.json`, `app/vite.config.ts`, `app/index.html`
+- Create: `app/src/main.tsx`, `app/src/routes/__root.tsx`
+- Create: `package.json` (workspace root)
+- Remove: `web/`（Task 3 完了後に削除）
+
+- [ ] **Step 1: npm workspaces ルート**
+
+`/package.json`:
+```json
+{
+  "name": "fork",
+  "private": true,
+  "workspaces": ["app", "worker", "packages/db"],
+  "scripts": {
+    "dev": "npm run build:app && wrangler dev",
+    "build:app": "npm run build -w app",
+    "deploy": "npm run build:app && wrangler deploy",
+    "test": "vitest run",
+    "e2e": "playwright test -c app/playwright.config.ts"
+  }
+}
+```
+
+- [ ] **Step 2: Vite プロジェクト作成**
+
+```bash
+cd app && npm create vite@latest . -- --template react-ts
+npm install @tanstack/react-router @tanstack/router-plugin
+```
+
+`app/vite.config.ts` — dev proxy to wrangler:
+```typescript
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
+
+export default defineConfig({
+  plugins: [TanStackRouterVite(), react()],
+  server: {
+    proxy: { "/api": "http://localhost:8787" },
+  },
+  build: { outDir: "dist" },
+});
+```
+
+- [ ] **Step 3: 既存 UI を移植**
+
+`web/src/components/{Chat,InRoomUI,Participants}.tsx` → `app/src/components/`  
+`web/src/pages/globals.css` → `app/src/styles/globals.css`  
+LiveKit 依存コードは Stub に置換（Task 3 で SFU 接続に差し替え）
+
+- [ ] **Step 4: TanStack Router ルート**
+
+- `/` — ロビー（旧 `index.tsx` のロビー部分）
+- `/room/$slug` — 配信/視聴（`?publish=true|false` を search param で受ける）
+- `/admin/monitor` — 監視
+
+- [ ] **Step 5: api.ts ラッパー**
+
+```typescript
+export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(path, { ...init, credentials: "include" });
+  if (!res.ok) throw new Error(`${path} ${res.status}`);
+  return res.json() as Promise<T>;
+}
+```
+
+- [ ] **Step 6: ビルド + wrangler dev で SPA 配信確認**
+
+Run:
+```bash
+npm run build:app && npx wrangler dev
+```
+Expected: `http://localhost:8787/` → Vite SPA、`/api/health` → JSON
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add app/ package.json
+git commit -m "feat: add Vite React SPA with TanStack Router"
+```
+
+---
+
+### Task 1C: Arctic OAuth + KV セッション
+
+**Files:**
+- Create: `worker/src/routes/auth.ts`
+- Create: `worker/src/middleware/session.ts`
+- Modify: `worker/src/index.ts`
+
+- [ ] **Step 1: Arctic インストール**
+
+```bash
+cd worker && npm install arctic hono
+```
+
+- [ ] **Step 2: session middleware**
+
+`worker/src/middleware/session.ts`:
+```typescript
+import type { Context, Next } from "hono";
+import type { Env } from "../env";
+
+const COOKIE = "__Host-fork-session";
+
+export async function requireSession(c: Context<{ Bindings: Env }>, next: Next) {
+  const sessionId = getCookie(c, COOKIE);
+  if (!sessionId) return c.json({ error: "unauthorized" }, 401);
+  const raw = await c.env.KV.get(`session:${sessionId}`, "json");
+  if (!raw) return c.json({ error: "unauthorized" }, 401);
+  c.set("user", raw as { userId: string; name: string });
+  return next();
+}
+
+export function getCookie(c: Context, name: string): string | undefined {
+  const header = c.req.header("Cookie") ?? "";
+  const match = header.match(new RegExp(`${name}=([^;]+)`));
+  return match?.[1];
+}
+```
+
+- [ ] **Step 3: auth routes (Google + X)**
+
+`worker/src/routes/auth.ts` — Arctic `Google`, `Twitter` クライアント。callback で:
+1. `crypto.randomUUID()` → sessionId
+2. `KV.put(`session:${id}`, { userId, name }, { expirationTtl: 604800 })`
+3. `Set-Cookie: __Host-fork-session=...`
+
+Secrets:
+```bash
+npx wrangler secret put GOOGLE_CLIENT_ID
+npx wrangler secret put GOOGLE_CLIENT_SECRET
+npx wrangler secret put TWITTER_CLIENT_ID
+npx wrangler secret put TWITTER_CLIENT_SECRET
+```
+
+- [ ] **Step 4: SPA ログインボタン**
+
+`app/src/routes/index.tsx` — `<a href="/api/auth/google">Googleでサインイン</a>`
+
+- [ ] **Step 5: Commit**
+
+```bash
+git commit -m "feat: add Arctic OAuth with KV session cookies"
+```
+
+---
+
 ## Phase 1: Realtime SFU 音声配信
 
 ### Task 2: SFU セッション発行 API
@@ -326,13 +512,16 @@ git commit -m "feat: add Realtime SFU session API"
 
 ---
 
-### Task 3: フロントエンド SFU クライアント
+### Task 3: フロントエンド SFU クライアント + web/ 削除
 
 **Files:**
-- Create: `web/src/lib/sfu-client.ts`
-- Modify: `web/src/pages/room/[name].tsx`
-- Modify: `web/src/components/InRoomUI.tsx`
-- Delete usage: `@livekit/components-react`, `livekit-client`（最終 Step）
+- Create: `app/src/lib/sfu-client.ts`
+- Create: `app/src/lib/room-ws.ts`
+- Modify: `app/src/components/InRoomUI.tsx`
+- Modify: `app/src/routes/room.$slug.tsx`
+- Delete: `web/` ディレクトリ全体
+- Delete: `livekit/` ディレクトリ（docker-compose）
+- Delete: `Makefile` の livekit ターゲット
 
 - [ ] **Step 1: sfu-client.ts — RTCPeerConnection ラッパー**
 
@@ -368,26 +557,27 @@ export class SfuAudioClient {
 
 - [ ] **Step 2: InRoomUI を SfuAudioClient に差し替え**
 
-`LiveKitRoom` / `useRoomContext` を除去。マイク toggle は `MediaStreamTrack.enabled` で制御。
+LiveKit 参照をすべて除去。マイク toggle は `MediaStreamTrack.enabled` で制御。
 
 - [ ] **Step 3: DataChannel でリアクション broadcast**
 
-SFU DataChannels API を使用（`topic: "reaction"` 相当）。既存 UI の 👍/🎁 ボタンは維持。
+SFU DataChannels API を使用。既存 UI の 👍/🎁 ボタンは維持。
 
-- [ ] **Step 4: package.json から livekit 依存削除**
+- [ ] **Step 4: web/ と livekit/ を削除**
 
 ```bash
-cd web && npm uninstall @livekit/components-react livekit-client
+git rm -r web/ livekit/
+# Makefile から livekit-up/down を削除
 ```
 
-- [ ] **Step 5: E2E 更新**
+- [ ] **Step 5: E2E 新設**
 
-`web/tests/room.page.spec.ts` — LiveKit セレクタを SFU 接続状態バッジに変更。
+`app/e2e/room.spec.ts` — 接続状態バッジ・配信開始フローを Playwright で検証。
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git commit -m "feat: replace LiveKit with Cloudflare Realtime SFU client"
+git commit -m "feat: replace LiveKit/Next.js with SFU client on Vite SPA"
 ```
 
 ---
@@ -449,9 +639,8 @@ git commit -m "fix: release host_identity on stream end and stale timeout"
 ### Task 5: 視聴者数 WebSocket 移行
 
 **Files:**
-- Create: `web/src/lib/room-ws.ts`
-- Modify: `web/src/components/InRoomUI.tsx`
-- Remove: `web/src/pages/api/room/viewers/stream.ts`（Workers 移行後）
+- Create: `app/src/lib/room-ws.ts`（Task 3 で作成済みなら拡張）
+- Modify: `app/src/components/InRoomUI.tsx`
 
 - [ ] **Step 1: room-ws.ts クライアント**
 
@@ -487,7 +676,7 @@ git commit -m "feat: replace SSE viewer count with RoomDO WebSocket"
 
 **Files:**
 - Modify: `worker/src/routes/room.ts`
-- Modify: `web/src/pages/admin/monitor.tsx`
+- Modify: `app/src/routes/admin.monitor.tsx`
 
 - [ ] **Step 1: admin_users シード**
 
@@ -521,7 +710,7 @@ git commit -m "feat: add admin RBAC for monitor page"
 **Files:**
 - Create: `worker/src/lib/rate-limit.ts`
 - Modify: `worker/src/routes/reaction.ts`
-- Modify: `web/src/components/InRoomUI.tsx`
+- Modify: `app/src/components/InRoomUI.tsx`
 
 - [ ] **Step 1: KV レートリミット（10 req/min/user/endpoint）**
 
@@ -542,26 +731,51 @@ git commit -m "feat: add rate limiting and share link"
 
 ---
 
-### Task 8: Pages デプロイ + CI
+### Task 8: Worker デプロイ + CI
 
 **Files:**
 - Modify: `.github/workflows/ci.yml`
 - Create: `.github/workflows/deploy-cloudflare.yml`
+- Modify: `README.md`
 
-- [ ] **Step 1: OpenNext Cloudflare 設定**
+- [ ] **Step 1: GitHub Actions デプロイ**
 
-```bash
-cd web && npx @opennextjs/cloudflare init
+`.github/workflows/deploy-cloudflare.yml`:
+```yaml
+name: Deploy
+on:
+  push:
+    branches: [main]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - run: npm ci
+      - run: npm run build:app
+      - run: npm test
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 ```
 
-- [ ] **Step 2: GitHub Actions — PR で vitest + playwright、main で wrangler deploy**
+- [ ] **Step 2: Secrets を Cloudflare Dashboard + GitHub に設定**
 
-- [ ] **Step 3: 環境変数を Cloudflare Dashboard / wrangler secret に設定**
+Worker secrets: `REALTIME_APP_ID`, `REALTIME_APP_SECRET`, `GOOGLE_*`, `TWITTER_*`  
+OAuth callback: `https://fork-api.<account>.workers.dev/api/auth/google/callback`
+
+- [ ] **Step 3: README を Cloudflare 構成に書き換え**
+
+- LiveKit Docker 手順を削除
+- `npm run dev` / `npm run deploy` に統一
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git commit -m "ci: add Cloudflare Pages and Workers deploy pipeline"
+git commit -m "ci: deploy single Worker with Static Assets via wrangler"
 ```
 
 ---
@@ -594,8 +808,11 @@ git commit -m "ci: add Cloudflare Pages and Workers deploy pipeline"
 | host 解放 | Task 4 |
 | RoomDO WS | Task 1, 5 |
 | D1 スキーマ | Task 0 |
+| Vite SPA（Next.js 全廃） | Task 1B, 3 |
+| Arctic + KV 認証 | Task 1C |
 | RBAC | Task 6 |
 | レートリミット | Task 7 |
-| KV キャッシュ | Task 0 (KV binding), Task 7 拡張で room list |
+| KV キャッシュ | Task 0, Task 7 |
 | Cron cleanup | Task 4 |
-| OpenNext Pages | Task 8 |
+| Workers Static Assets デプロイ | Task 8 |
+| workers.dev（カスタムドメイン任意） | Task 8 |
