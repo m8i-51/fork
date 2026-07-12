@@ -14,6 +14,7 @@ permissions:
 
 env:
   DEPLOY_ENV: production
+  WRANGLER_CONFIG: infra/generated/wrangler.production.merged.toml
 
 jobs:
   deploy:
@@ -84,7 +85,7 @@ jobs:
           fi
           npx wrangler secret bulk "$SECRETS_FILE" \
             --env "${{ env.DEPLOY_ENV }}" \
-            -c wrangler.toml -c "infra/generated/wrangler.${{ env.DEPLOY_ENV }}.toml"
+            -c "${{ env.WRANGLER_CONFIG }}"
 
       - name: Apply D1 migrations (remote)
         env:
@@ -93,14 +94,14 @@ jobs:
         run: |
           npx wrangler d1 migrations apply "fork-${{ env.DEPLOY_ENV }}" --remote \
             --env "${{ env.DEPLOY_ENV }}" \
-            -c wrangler.toml -c "infra/generated/wrangler.${{ env.DEPLOY_ENV }}.toml"
+            -c "${{ env.WRANGLER_CONFIG }}"
 
       - name: Deploy Worker
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy --env ${{ env.DEPLOY_ENV }} -c wrangler.toml -c infra/generated/wrangler.${{ env.DEPLOY_ENV }}.toml
+          command: deploy --env ${{ env.DEPLOY_ENV }} -c ${{ env.WRANGLER_CONFIG }}
 
       - name: Commit Terraform state
         uses: stefanzweifel/git-auto-commit-action@v5

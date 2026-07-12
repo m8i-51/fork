@@ -13,6 +13,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
 
 const env = process.argv[2];
 if (!env || !["staging", "production"].includes(env)) {
@@ -52,3 +53,11 @@ id = "${process.env.KV_NAMESPACE_ID}"
 const outPath = join(outDir, `wrangler.${env}.toml`);
 writeFileSync(outPath, overlay, "utf8");
 console.log(`Wrote ${outPath}`);
+
+const merge = spawnSync(process.execPath, ["infra/scripts/merge-wrangler-config.mjs", env], {
+  cwd: root,
+  stdio: "inherit",
+});
+if (merge.status !== 0) {
+  process.exit(merge.status ?? 1);
+}

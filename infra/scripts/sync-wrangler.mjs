@@ -3,7 +3,7 @@
  * Terraform outputs → wrangler env overlay
  * Usage: node infra/scripts/sync-wrangler.mjs staging
  */
-import { execSync } from "node:child_process";
+import { execSync, spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -54,3 +54,11 @@ writeFileSync(outPath, overlay, "utf8");
 console.log(`Wrote ${outPath}`);
 console.log(`  D1: ${outputs.d1_database_id}`);
 console.log(`  KV: ${outputs.kv_namespace_id}`);
+
+const merge = spawnSync(process.execPath, ["infra/scripts/merge-wrangler-config.mjs", env], {
+  cwd: root,
+  stdio: "inherit",
+});
+if (merge.status !== 0) {
+  process.exit(merge.status ?? 1);
+}
