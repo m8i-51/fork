@@ -15,9 +15,9 @@ Worker コードのビルド・デプロイは引き続き **Wrangler** が担�
 Terraform apply
     ↓ outputs (D1 ID, KV ID)
 sync-wrangler.mjs → infra/generated/wrangler.<env>.toml
-merge-wrangler-config.mjs → infra/generated/wrangler.<env>.merged.toml
+merge-wrangler-config.mjs → wrangler.<env>.ci.toml（リポジトリルート）
     ↓
-wrangler deploy -c infra/generated/wrangler.<env>.merged.toml
+wrangler deploy -c wrangler.<env>.ci.toml
 ```
 
 ## 初回セットアップ

@@ -16,7 +16,7 @@ if (!env || !["staging", "production"].includes(env)) {
 const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const basePath = join(root, "wrangler.toml");
 const overlayPath = join(root, `infra/generated/wrangler.${env}.toml`);
-const mergedPath = join(root, `infra/generated/wrangler.${env}.merged.toml`);
+const mergedPath = join(root, `wrangler.${env}.ci.toml`);
 
 const base = readFileSync(basePath, "utf8").trimEnd();
 const overlay = readFileSync(overlayPath, "utf8");

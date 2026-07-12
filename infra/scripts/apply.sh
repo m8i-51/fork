@@ -31,8 +31,8 @@ case "$ACTION" in
     node "$ROOT/infra/scripts/sync-wrangler.mjs" "$ENV"
     echo ""
     echo "Next steps:"
-    echo "  1. wrangler d1 migrations apply fork-${ENV} --remote --env ${ENV} -c infra/generated/wrangler.${ENV}.merged.toml"
-    echo "  2. wrangler secret bulk infra/secrets.${ENV}.env --env ${ENV} -c infra/generated/wrangler.${ENV}.merged.toml"
+    echo "  1. wrangler d1 migrations apply fork-${ENV} --remote --env ${ENV} -c wrangler.${ENV}.ci.toml"
+    echo "  2. wrangler secret bulk infra/secrets.${ENV}.env --env ${ENV} -c wrangler.${ENV}.ci.toml"
     echo "  3. npm run deploy:${ENV}"
     ;;
   *)

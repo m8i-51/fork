@@ -14,7 +14,7 @@ permissions:
 
 env:
   DEPLOY_ENV: production
-  WRANGLER_CONFIG: infra/generated/wrangler.production.merged.toml
+  WRANGLER_CONFIG: wrangler.production.ci.toml
 
 jobs:
   deploy:

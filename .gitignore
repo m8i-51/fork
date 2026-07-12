@@ -29,6 +29,7 @@ infra/terraform/tfplan-*
 infra/terraform/*.tfvars
 !infra/terraform/*.tfvars.example
 infra/generated/*.toml
+wrangler.*.ci.toml
 infra/secrets.*.env
 !infra/secrets.example.env
 
