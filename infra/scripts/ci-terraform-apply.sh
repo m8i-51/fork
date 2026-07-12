@@ -12,9 +12,12 @@ TF_DIR="$ROOT/infra/terraform"
 : "${TF_VAR_app_url:?Set TF_VAR_app_url (APP_URL repository variable)}"
 
 export TF_VAR_environment="$ENV"
+export CLOUDFLARE_ACCOUNT_ID="$TF_VAR_cloudflare_account_id"
+
+cd "$ROOT"
+bash "$ROOT/infra/scripts/terraform-import-if-exists.sh" "$ENV"
 
 cd "$TF_DIR"
-terraform init -input=false
 terraform apply -auto-approve -input=false
 
 node "$ROOT/infra/scripts/sync-wrangler.mjs" "$ENV"
