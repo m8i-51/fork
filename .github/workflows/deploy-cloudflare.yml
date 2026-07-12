@@ -1,0 +1,110 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  DEPLOY_ENV: production
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      !contains(github.event.head_commit.message, '[skip ci]')
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify CI configuration
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          APP_URL: ${{ vars.APP_URL }}
+        run: |
+          missing=0
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID APP_URL; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Missing GitHub secret/variable: $name"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Terraform apply (D1 / KV)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TF_VAR_app_url: ${{ vars.APP_URL }}
+        run: bash infra/scripts/ci-terraform-apply.sh ${{ env.DEPLOY_ENV }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build:app
+
+      - run: npm run test
+
+      - name: Write Worker secrets file
+        env:
+          REALTIME_APP_ID: ${{ secrets.REALTIME_APP_ID }}
+          REALTIME_APP_SECRET: ${{ secrets.REALTIME_APP_SECRET }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          TWITTER_CLIENT_ID: ${{ secrets.TWITTER_CLIENT_ID }}
+          TWITTER_CLIENT_SECRET: ${{ secrets.TWITTER_CLIENT_SECRET }}
+        run: node infra/scripts/write-secrets-env.mjs ${{ env.DEPLOY_ENV }}
+
+      - name: Sync Worker secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          SECRETS_FILE="infra/secrets.${{ env.DEPLOY_ENV }}.env"
+          if [[ ! -f "$SECRETS_FILE" ]]; then
+            echo "No secrets file — skipping wrangler secret bulk."
+            exit 0
+          fi
+          npx wrangler secret bulk "$SECRETS_FILE" \
+            --env "${{ env.DEPLOY_ENV }}" \
+            -c wrangler.toml -c "infra/generated/wrangler.${{ env.DEPLOY_ENV }}.toml"
+
+      - name: Apply D1 migrations (remote)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx wrangler d1 migrations apply "fork-${{ env.DEPLOY_ENV }}" --remote \
+            --env "${{ env.DEPLOY_ENV }}" \
+            -c wrangler.toml -c "infra/generated/wrangler.${{ env.DEPLOY_ENV }}.toml"
+
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --env ${{ env.DEPLOY_ENV }} -c wrangler.toml -c infra/generated/wrangler.${{ env.DEPLOY_ENV }}.toml
+
+      - name: Commit Terraform state
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore(terraform): update state [skip ci]"
+          file_pattern: infra/terraform/terraform.tfstate infra/terraform/terraform.tfstate.backup
+          skip_fetch: true

@@ -1,0 +1,6 @@
+# cp terraform.tfvars.example terraform.tfvars
+# または: terraform apply -var-file=staging.tfvars
+
+cloudflare_account_id = "YOUR_CLOUDFLARE_ACCOUNT_ID"
+environment           = "staging"
+app_url               = "https://fork-api-staging.YOUR_SUBDOMAIN.workers.dev"
