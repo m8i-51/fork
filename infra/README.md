@@ -97,22 +97,48 @@ npm run infra:sync -- staging
 
 ## State 管理
 
-デフォルトは `infra/terraform/terraform.tfstate`（ローカル）。  
-チーム運用では **Terraform Cloud** や **S3/R2 backend** を `versions.tf` に追加してください。
+CI では `infra/terraform/terraform.tfstate` を **リポジトリにコミット**して共有します（初回 deploy 後に bot が `[skip ci]` 付きで push）。  
+チーム拡大時は Terraform Cloud や R2 backend への移行を検討してください。
 
-## CI
+## CI（main 自動デプロイ）
 
-- PR / push: `terraform fmt -check` + `validate` + `plan`（Secrets がある場合）
-- main デプロイ: Repository **variables** で overlay を生成 → wrangler deploy
+`main` への push で `.github/workflows/deploy-cloudflare.yml` が実行されます:
 
-### GitHub Repository variables（production デプロイ用）
+```
+1. Terraform apply  → D1 / KV 確保
+2. wrangler overlay 生成
+3. build + test
+4. wrangler secret bulk（GitHub Secrets から）
+5. D1 migrations apply
+6. wrangler deploy
+7. terraform.tfstate を commit [skip ci]
+```
 
-| Variable | 例 |
-|----------|-----|
-| `APP_URL` | `https://fork-api-production.xxxx.workers.dev` |
-| `D1_DATABASE_ID` | Terraform output `d1_database_id` |
-| `D1_DATABASE_NAME` | `fork-production` |
-| `KV_NAMESPACE_ID` | Terraform output `kv_namespace_id` |
-| `WORKER_NAME` | （任意）`fork-api-production` |
+手動実行: Actions → Deploy → Run workflow
 
-Secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`、OAuth/SFU は `wrangler secret bulk` で別途。
+### GitHub 設定（初回のみ）
+
+**Repository secrets**（Settings → Secrets and variables → Actions）:
+
+| Secret | 必須 | 用途 |
+|--------|------|------|
+| `CLOUDFLARE_API_TOKEN` | ✅ | Terraform + Wrangler |
+| `CLOUDFLARE_ACCOUNT_ID` | ✅ | Account ID |
+| `REALTIME_APP_ID` | | SFU |
+| `REALTIME_APP_SECRET` | | SFU |
+| `GOOGLE_CLIENT_ID` | | OAuth |
+| `GOOGLE_CLIENT_SECRET` | | OAuth |
+| `TWITTER_CLIENT_ID` | | OAuth |
+| `TWITTER_CLIENT_SECRET` | | OAuth |
+
+**Repository variables**:
+
+| Variable | 必須 | 例 |
+|----------|------|-----|
+| `APP_URL` | ✅ | `https://fork-api-production.<subdomain>.workers.dev` |
+
+初回は Workers URL が未確定でも、上記パターンで仮設定 → 初回 deploy 後に実 URL へ更新 → 再 push で反映。
+
+### PR 時
+
+- `infra.yml`: `terraform fmt -check` + `validate` + `plan`（credentials がある場合）

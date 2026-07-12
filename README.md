@@ -46,27 +46,28 @@ npx wrangler secret put REALTIME_APP_SECRET
 npm run deploy
 ```
 
-### staging / production（IaC 推奨）
+### production（CI 自動）
 
-D1 / KV は **Terraform**、Worker は **Wrangler** で管理します。詳細は [`infra/README.md`](infra/README.md)。
+`main` へ merge すると GitHub Actions が **Terraform → マイグレーション → デプロイ** まで実行します。
+
+**初回セットアップ** — GitHub Repository に以下を設定:
+
+| 種別 | 名前 | 必須 |
+|------|------|------|
+| Secret | `CLOUDFLARE_API_TOKEN` | ✅ |
+| Secret | `CLOUDFLARE_ACCOUNT_ID` | ✅ |
+| Variable | `APP_URL` | ✅ |
+| Secret | `REALTIME_APP_*`, `GOOGLE_*`, `TWITTER_*` | OAuth/SFU 利用時 |
+
+詳細: [`infra/README.md`](infra/README.md)
+
+### 手動デプロイ（staging 等）
 
 ```bash
 cp infra/terraform/staging.tfvars.example infra/terraform/staging.tfvars
-# cloudflare_account_id, app_url を編集
-
 export CLOUDFLARE_API_TOKEN="..."
 npm run infra:apply -- staging
 npm run deploy:staging
-```
-
-GitHub Actions では Repository variables に `D1_DATABASE_ID`, `D1_DATABASE_NAME`, `KV_NAMESPACE_ID`, `APP_URL` を設定すると、main への push で overlay 付きデプロイが走ります。
-
-Secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`（既存どおり）
-
-初回リモート D1（IaC 未使用時）:
-
-```bash
-npx wrangler d1 migrations apply fork --remote
 ```
 
 ## 管理者
