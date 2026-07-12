@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Send } from "lucide-react";
 import { sanitizeInlineText } from "@fork/shared";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 export type ChatMessage = {
   id: string;
@@ -14,7 +18,7 @@ type Props = {
   onSend: (text: string) => void;
 };
 
-export function Chat({ messages, onSend }: Props) {
+export function ChatPanel({ messages, onSend }: Props) {
   const [text, setText] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
   const [hasUnread, setHasUnread] = useState(false);
@@ -30,7 +34,7 @@ export function Chat({ messages, onSend }: Props) {
     } else {
       setHasUnread(true);
     }
-  }, [messages.length]);
+  }, [messages.length, messages]);
 
   const items = useMemo(() => messages.slice(-200), [messages]);
 
@@ -42,18 +46,27 @@ export function Chat({ messages, onSend }: Props) {
   };
 
   return (
-    <div className="chat">
-      <div className="chat-messages" ref={listRef}>
+    <div className="flex min-h-[280px] flex-col rounded-xl border border-border lg:min-h-[420px]">
+      <div ref={listRef} className="flex-1 space-y-2 overflow-y-auto p-3">
         {items.map((m) => (
-          <div key={m.id} className={`chat-msg ${m.self ? "self" : "other"}`}>
-            {!m.self && <div className="chat-meta" style={{ marginBottom: 2 }}>{m.from}</div>}
+          <div
+            key={m.id}
+            className={cn(
+              "max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed",
+              m.self
+                ? "ml-auto rounded-br-sm bg-primary text-primary-foreground"
+                : "rounded-bl-sm border border-border bg-card",
+            )}
+          >
+            {!m.self && <div className="mb-0.5 text-xs text-muted-foreground">{m.from}</div>}
             <div>{m.text}</div>
           </div>
         ))}
         {hasUnread && (
-          <div className="chat-new">
-            <button
+          <div className="sticky bottom-0 text-right">
+            <Button
               type="button"
+              size="xs"
               onClick={() => {
                 const el = listRef.current;
                 if (el) el.scrollTop = el.scrollHeight;
@@ -61,13 +74,12 @@ export function Chat({ messages, onSend }: Props) {
               }}
             >
               新着メッセージ
-            </button>
+            </Button>
           </div>
         )}
       </div>
-      <div className="chat-input">
-        <input
-          className="input"
+      <div className="flex gap-2 border-t border-border p-3">
+        <Input
           placeholder="メッセージを入力"
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -77,10 +89,11 @@ export function Chat({ messages, onSend }: Props) {
               send();
             }
           }}
+          className="flex-1"
         />
-        <button type="button" className="btn" style={{ marginTop: 8 }} onClick={send}>
-          ✈ 送信
-        </button>
+        <Button type="button" size="icon" onClick={send} aria-label="送信">
+          <Send className="size-4" />
+        </Button>
       </div>
     </div>
   );

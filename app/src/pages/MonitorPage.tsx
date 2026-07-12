@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { api, fetchMe } from "../lib/api";
+import { BarChart3, ShieldAlert } from "lucide-react";
+import { AppShellLink } from "@/components/layout/AppShell";
+import { RoomsTable } from "@/components/monitor/RoomsTable";
+import { StatsCards } from "@/components/monitor/StatsCards";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { api, fetchMe } from "@/lib/api";
 
 type RoomRow = {
   name: string;
@@ -35,63 +42,71 @@ export function MonitorPage() {
   useEffect(() => {
     if (!authorized) return;
     const t = setInterval(() => {
-      void api<{ rooms: RoomRow[]; total: number }>("/api/admin/rooms").then((data) => {
-        setRooms(data.rooms);
-        setTotal(data.total);
-      }).catch(() => undefined);
+      void api<{ rooms: RoomRow[]; total: number }>("/api/admin/rooms")
+        .then((data) => {
+          setRooms(data.rooms);
+          setTotal(data.total);
+        })
+        .catch(() => undefined);
     }, 5000);
     return () => clearInterval(t);
   }, [authorized]);
 
-  if (authorized === null) return <div className="container muted">読み込み中…</div>;
-
-  if (!authorized) {
+  if (authorized === null) {
     return (
-      <div className="container">
-        <h1>Monitor</h1>
-        <p>サインインまたは管理者権限が必要です。</p>
-        <a className="btn" href="/api/auth/google">
-          サインイン
-        </a>
-        <p style={{ marginTop: 16 }}>
-          <Link to="/">ロビーへ</Link>
-        </p>
+      <div className="space-y-4">
+        <Skeleton className="h-8 w-48" />
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+        </div>
+        <Skeleton className="h-64" />
       </div>
     );
   }
 
+  if (!authorized) {
+    return (
+      <Card className="mx-auto max-w-md py-8 text-center">
+        <CardHeader>
+          <ShieldAlert className="mx-auto size-10 text-muted-foreground" />
+          <CardTitle>管理者権限が必要です</CardTitle>
+          <CardDescription>Monitor ページは管理者のみアクセスできます</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <Button asChild>
+            <a href="/api/auth/google">サインイン</a>
+          </Button>
+          <AppShellLink to="/">ロビーへ戻る</AppShellLink>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const activeStreams = rooms.filter((r) => r.hostIdentity).length;
+
   return (
-    <div className="container">
-      <h1>Monitor</h1>
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div>合計視聴者: {total}</div>
-        <div>ルーム数: {rooms.length}</div>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold">Monitor</h1>
+        <p className="text-sm text-muted-foreground">リアルタイム運用ダッシュボード</p>
       </div>
-      <div className="card">
-        <table className="table" style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr>
-              <th>Room</th>
-              <th>Host</th>
-              <th>Public</th>
-              <th>Viewers</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rooms.map((r) => (
-              <tr key={r.name}>
-                <td>{r.displayName || r.name}</td>
-                <td>{r.hostIdentity || "-"}</td>
-                <td>{String(r.isPublic)}</td>
-                <td>{r.viewers}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <p style={{ marginTop: 16 }}>
-        <Link to="/">ロビーへ</Link>
-      </p>
+
+      <StatsCards total={total} roomCount={rooms.length} activeStreams={activeStreams} />
+      <RoomsTable rooms={rooms} />
+
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="outline" disabled className="gap-2">
+            <BarChart3 className="size-4" />
+            帯域モニター
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>SFU egress 概算表示は近日公開予定です</TooltipContent>
+      </Tooltip>
+
+      <AppShellLink to="/">ロビーへ戻る</AppShellLink>
     </div>
   );
 }

@@ -1,9 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Chat, type ChatMessage } from "./Chat";
-import { Participants } from "./Participants";
-import { SfuAudioClient, type ConnectionState } from "../lib/sfu-client";
-import { connectRoomWs, sendChat, sendKick, sendReaction, type RoomWsHandlers } from "../lib/room-ws";
-import { api } from "../lib/api";
+import { Copy, LogOut, Mic, MicOff, Users } from "lucide-react";
+import { toast } from "sonner";
+import { ChatPanel, type ChatMessage } from "@/components/room/ChatPanel";
+import { GiftSheet } from "@/components/room/GiftSheet";
+import { HostHeader } from "@/components/room/HostHeader";
+import { MediaStage } from "@/components/room/MediaStage";
+import { ReactionBar } from "@/components/room/ReactionBar";
+import { ViewerDialog } from "@/components/room/ViewerDialog";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import { api } from "@/lib/api";
+import { SfuAudioClient, type ConnectionState } from "@/lib/sfu-client";
+import { connectRoomWs, sendChat, sendKick, sendReaction, type RoomWsHandlers } from "@/lib/room-ws";
 
 type Props = {
   roomName: string;
@@ -23,9 +34,11 @@ export function InRoomUI({ roomName, displayTitle, isHost, userId, userName, onL
   const [isPublicState, setIsPublicState] = useState(true);
   const [micEnabled, setMicEnabled] = useState(true);
   const [showParticipants, setShowParticipants] = useState(false);
+  const [showGiftSheet, setShowGiftSheet] = useState(false);
   const [floats, setFloats] = useState<Array<{ id: string; type: "like" | "gift" }>>([]);
   const [error, setError] = useState<string | null>(null);
   const [audioNeedsUnlock, setAudioNeedsUnlock] = useState(false);
+  const [connecting, setConnecting] = useState(true);
 
   const sfuRef = useRef<SfuAudioClient | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -81,12 +94,12 @@ export function InRoomUI({ roomName, displayTitle, isHost, userId, userName, onL
         }
       },
       onStreamEnded: () => {
-        alert("配信が終了しました");
+        toast.info("配信が終了しました");
         void leaveRoom();
       },
       onKick: (target) => {
         if (target === userId) {
-          alert("ホストによって退室させられました");
+          toast.error("ホストによって退室させられました");
           void leaveRoom();
         }
       },
@@ -98,9 +111,9 @@ export function InRoomUI({ roomName, displayTitle, isHost, userId, userName, onL
 
     const connect = async () => {
       try {
-        const info = await api<{
-          isPublic: boolean;
-        }>(`/api/room/info?room=${encodeURIComponent(roomName)}`);
+        const info = await api<{ isPublic: boolean }>(
+          `/api/room/info?room=${encodeURIComponent(roomName)}`,
+        );
         if (!cancelled) setIsPublicState(info.isPublic);
 
         const summary = await api<{ summary: Record<string, number> }>(
@@ -135,8 +148,12 @@ export function InRoomUI({ roomName, displayTitle, isHost, userId, userName, onL
             });
           }, 20000);
         }
+        if (!cancelled) setConnecting(false);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "接続に失敗しました");
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "接続に失敗しました");
+          setConnecting(false);
+        }
       }
     };
 
@@ -152,142 +169,154 @@ export function InRoomUI({ roomName, displayTitle, isHost, userId, userName, onL
 
   const copyShareLink = async () => {
     await navigator.clipboard.writeText(`${location.origin}/room/${roomName}?publish=false`);
+    toast.success("リンクをコピーしました");
   };
 
+  const sendReactionRequest = async (type: "like" | "gift") => {
+    if (isHost) return;
+    setReactions((p) => ({ ...p, [type]: (p[type] || 0) + 1 }));
+    spawnFloat(type);
+    if (wsRef.current) sendReaction(wsRef.current, type);
+    await fetch("/api/reaction/send", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ room: roomName, type }),
+    }).catch(() => undefined);
+  };
+
+  if (connecting) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-20 w-full rounded-xl" />
+        <Skeleton className="h-32 w-full rounded-xl" />
+        <Skeleton className="h-64 w-full rounded-xl" />
+        <p className="text-center text-sm text-muted-foreground">接続中…</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="col" style={{ gap: 16 }}>
+    <div className="space-y-4">
       {error && (
-        <div className="card" style={{ borderColor: "var(--danger)", color: "var(--danger)" }}>
-          {error}
-        </div>
+        <Alert variant="destructive">
+          <AlertTitle>エラー</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
+
       {audioNeedsUnlock && (
-        <div className="card" style={{ background: "#fff7ed", borderColor: "#fb923c" }}>
-          <div className="row" style={{ justifyContent: "space-between" }}>
-            <div>ブラウザの制限で音声が停止しています。</div>
-            <button
+        <Alert className="border-amber-500/50 bg-amber-500/10">
+          <AlertTitle>音声の再生</AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
+            <span>ブラウザの制限で音声が停止しています。</span>
+            <Button
               type="button"
-              className="btn"
+              size="sm"
               onClick={() => {
                 void audioRef.current?.play();
                 setAudioNeedsUnlock(false);
               }}
             >
               音声を有効化
-            </button>
-          </div>
-        </div>
+            </Button>
+          </AlertDescription>
+        </Alert>
       )}
 
-      <div className="topbar" style={{ position: "sticky", top: 8, zIndex: 10 }}>
-        <div className="row" style={{ gap: 8, minWidth: 0 }}>
-          <div
-            className={`status-dot ${
-              connState === "connected"
-                ? "status-connected"
-                : connState === "connecting"
-                  ? "status-reconnecting"
-                  : "status-disconnected"
-            }`}
-          />
-          <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {displayTitle}
-          </div>
-        </div>
-        <div className="row controls" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          {isHost && (
-            <>
-              <button
-                type="button"
-                className="btn secondary"
-                onClick={() => {
-                  const next = !micEnabled;
-                  setMicEnabled(next);
-                  sfuRef.current?.setMicEnabled(next);
-                }}
-              >
-                {micEnabled ? "ミュート" : "ミュート解除"}
-              </button>
-              <label className="row" style={{ gap: 6 }}>
-                <input
-                  type="checkbox"
-                  checked={isPublicState}
-                  onChange={async (e) => {
-                    const next = e.target.checked;
-                    setIsPublicState(next);
-                    await fetch("/api/room/set-public", {
-                      method: "POST",
-                      credentials: "include",
-                      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                      body: new URLSearchParams({ room: roomName, isPublic: String(next) }),
-                    });
-                  }}
-                />
-                <span style={{ fontSize: 12 }}>一覧に公開</span>
-              </label>
-            </>
-          )}
-          <button type="button" className="btn secondary" onClick={() => void copyShareLink()}>
-            リンクをコピー
-          </button>
-          <button type="button" className="btn secondary" onClick={() => void leaveRoom()}>
-            {isHost ? "配信終了" : "退出"}
-          </button>
-        </div>
-      </div>
+      <HostHeader
+        displayTitle={displayTitle}
+        viewerCount={viewerCount}
+        connState={connState}
+        isHost={isHost}
+        hostName={isHost ? userName : undefined}
+      />
 
-      <div className="stack">
-        <div style={{ flex: 1 }} className="card">
-          <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-            <h3 style={{ margin: 0 }}>チャット</h3>
-            <div className="row" style={{ gap: 8 }}>
-              <div className="muted">視聴者数 {viewerCount}</div>
-              <button type="button" className="btn secondary" onClick={() => setShowParticipants(true)}>
-                視聴者 ({viewerCount + (isHost ? 1 : 0)})
-              </button>
-            </div>
-          </div>
-          <div className="row" style={{ gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-            <button
+      <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
+        <div className="space-y-4">
+          <MediaStage isActive={connState === "connected" && (isHost || viewerCount > 0)} />
+
+          <ReactionBar
+            reactions={reactions}
+            isHost={isHost}
+            onLike={() => void sendReactionRequest("like")}
+            onGift={() => void sendReactionRequest("gift")}
+            onOpenGiftSheet={() => setShowGiftSheet(true)}
+          />
+
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3">
+            {isHost && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const next = !micEnabled;
+                    setMicEnabled(next);
+                    sfuRef.current?.setMicEnabled(next);
+                  }}
+                >
+                  {micEnabled ? (
+                    <>
+                      <MicOff className="size-4" />
+                      ミュート
+                    </>
+                  ) : (
+                    <>
+                      <Mic className="size-4" />
+                      ミュート解除
+                    </>
+                  )}
+                </Button>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="public-toggle"
+                    checked={isPublicState}
+                    onCheckedChange={async (next) => {
+                      setIsPublicState(next);
+                      await fetch("/api/room/set-public", {
+                        method: "POST",
+                        credentials: "include",
+                        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                        body: new URLSearchParams({ room: roomName, isPublic: String(next) }),
+                      });
+                    }}
+                  />
+                  <Label htmlFor="public-toggle" className="text-sm">
+                    一覧に公開
+                  </Label>
+                </div>
+              </>
+            )}
+            <Button type="button" variant="outline" size="sm" onClick={() => void copyShareLink()}>
+              <Copy className="size-4" />
+              リンクをコピー
+            </Button>
+            <Button
               type="button"
-              className="btn secondary"
-              disabled={isHost}
-              onClick={async () => {
-                if (isHost) return;
-                setReactions((p) => ({ ...p, like: (p.like || 0) + 1 }));
-                spawnFloat("like");
-                if (wsRef.current) sendReaction(wsRef.current, "like");
-                await fetch("/api/reaction/send", {
-                  method: "POST",
-                  credentials: "include",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ room: roomName, type: "like" }),
-                }).catch(() => undefined);
-              }}
+              variant="outline"
+              size="sm"
+              onClick={() => setShowParticipants(true)}
             >
-              👍 {reactions.like || 0}
-            </button>
-            <button
+              <Users className="size-4" />
+              視聴者 ({viewerCount + (isHost ? 1 : 0)})
+            </Button>
+            <Button
               type="button"
-              className="btn secondary"
-              disabled={isHost}
-              onClick={async () => {
-                if (isHost) return;
-                setReactions((p) => ({ ...p, gift: (p.gift || 0) + 1 }));
-                spawnFloat("gift");
-                if (wsRef.current) sendReaction(wsRef.current, "gift");
-                await fetch("/api/reaction/send", {
-                  method: "POST",
-                  credentials: "include",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ room: roomName, type: "gift" }),
-                }).catch(() => undefined);
-              }}
+              variant={isHost ? "destructive" : "outline"}
+              size="sm"
+              onClick={() => void leaveRoom()}
             >
-              🎁 {reactions.gift || 0}
-            </button>
+              <LogOut className="size-4" />
+              {isHost ? "配信終了" : "退出"}
+            </Button>
           </div>
-          <Chat
+        </div>
+
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold">チャット</h3>
+          <ChatPanel
             messages={messages}
             onSend={(text) => {
               if (wsRef.current) sendChat(wsRef.current, text);
@@ -300,51 +329,29 @@ export function InRoomUI({ roomName, displayTitle, isHost, userId, userName, onL
         </div>
       </div>
 
-      {showParticipants && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="modal-overlay"
-          onClick={() => setShowParticipants(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.4)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            zIndex: 50,
-          }}
-        >
-          <div className="card" onClick={(e) => e.stopPropagation()} style={{ width: "min(90vw, 720px)" }}>
-            <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
-              <h3 style={{ margin: 0 }}>視聴者</h3>
-              <button type="button" className="btn secondary" onClick={() => setShowParticipants(false)}>
-                閉じる
-              </button>
-            </div>
-            <Participants
-              participants={participants}
-              selfIdentity={userId}
-              isHost={isHost}
-              onKick={(identity) => wsRef.current && sendKick(wsRef.current, identity)}
-              onBan={async (identity) => {
-                await fetch("/api/moderation/ban", {
-                  method: "POST",
-                  credentials: "include",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ room: roomName, identity }),
-                });
-                if (wsRef.current) sendKick(wsRef.current, identity);
-              }}
-            />
-          </div>
-        </div>
-      )}
+      <ViewerDialog
+        open={showParticipants}
+        onOpenChange={setShowParticipants}
+        participants={participants}
+        selfIdentity={userId}
+        isHost={isHost}
+        onKick={(identity) => wsRef.current && sendKick(wsRef.current, identity)}
+        onBan={async (identity) => {
+          await fetch("/api/moderation/ban", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ room: roomName, identity }),
+          });
+          if (wsRef.current) sendKick(wsRef.current, identity);
+        }}
+      />
 
-      <div className="reactions-overlay" style={{ position: "fixed", right: 24, bottom: 80, pointerEvents: "none" }}>
+      <GiftSheet open={showGiftSheet} onOpenChange={setShowGiftSheet} />
+
+      <div className="pointer-events-none fixed right-6 bottom-20 z-40">
         {floats.map((f) => (
-          <div key={f.id} className={`float ${f.type}`}>
+          <div key={f.id} className="animate-float-up text-2xl drop-shadow-md">
             {f.type === "like" ? "👍" : "🎁"}
           </div>
         ))}

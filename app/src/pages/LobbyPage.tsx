@@ -1,128 +1,146 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { isValidDisplayName, normalizeDisplayName } from "@fork/shared";
-import { api, devLogin, fetchMe, logout, type AuthUser } from "../lib/api";
+import { Radio } from "lucide-react";
+import { devLogin, fetchMe, type AuthUser } from "@/lib/api";
+import { api } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { CategoryTabsPlaceholder } from "@/components/lobby/CategoryTabsPlaceholder";
+import { CreateRoomForm } from "@/components/lobby/CreateRoomForm";
+import { LiveRoomCard } from "@/components/lobby/LiveRoomCard";
+import { SearchBarPlaceholder } from "@/components/lobby/SearchBarPlaceholder";
 
 type PublicRoom = { name: string; displayName?: string | null; viewers: number };
 
+function RoomSkeleton() {
+  return (
+    <Card className="py-4">
+      <CardContent className="space-y-3">
+        <div className="flex gap-3">
+          <Skeleton className="size-10 rounded-full" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-4 w-3/4" />
+            <Skeleton className="h-3 w-1/2" />
+          </div>
+        </div>
+        <Skeleton className="h-8 w-full" />
+      </CardContent>
+    </Card>
+  );
+}
+
 export function LobbyPage() {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [createName, setCreateName] = useState("");
+  const [authLoading, setAuthLoading] = useState(true);
+  const [roomsLoading, setRoomsLoading] = useState(true);
   const [publicRooms, setPublicRooms] = useState<PublicRoom[]>([]);
 
   useEffect(() => {
     void fetchMe().then((res) => {
       setUser(res.authenticated ? (res.user ?? null) : null);
-      setLoading(false);
+      setAuthLoading(false);
     });
   }, []);
 
   useEffect(() => {
     const load = () => {
-      void api<{ rooms: PublicRoom[] }>("/api/room/list?onlyLive=true").then((j) => {
-        setPublicRooms(j.rooms ?? []);
-      }).catch(() => undefined);
+      void api<{ rooms: PublicRoom[] }>("/api/room/list?onlyLive=true")
+        .then((j) => {
+          setPublicRooms(j.rooms ?? []);
+          setRoomsLoading(false);
+        })
+        .catch(() => setRoomsLoading(false));
     };
     load();
     const t = setInterval(load, 15000);
     return () => clearInterval(t);
   }, []);
 
-  const createRoom = async () => {
-    const dn = normalizeDisplayName(createName);
-    if (!isValidDisplayName(dn)) {
-      alert("表示名が不正です（1〜32文字、絵文字・特殊記号不可）");
-      return;
-    }
-    const j = await api<{ slug: string }>("/api/room/create", {
-      method: "POST",
-      body: JSON.stringify({ displayName: dn }),
-    });
-    window.location.assign(`/room/${encodeURIComponent(j.slug)}?publish=true`);
-  };
-
-  if (loading) return <div className="container muted">読み込み中…</div>;
+  if (authLoading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-11 w-full" />
+        <Skeleton className="h-32 w-full" />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <RoomSkeleton />
+          <RoomSkeleton />
+          <RoomSkeleton />
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="container">
-      <h1 style={{ fontSize: 28, marginBottom: 20, textAlign: "center" }}>fork</h1>
+    <div className="space-y-6">
+      <div className="text-center">
+        <h1 className="text-2xl font-bold tracking-tight">ライブを見つけよう</h1>
+        <p className="mt-1 text-sm text-muted-foreground">音声ライブ配信 fork</p>
+      </div>
 
-      <div className="card" style={{ marginBottom: 16 }}>
-        {user ? (
-          <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
-            <div>こんにちは、{user.name}</div>
-            <button type="button" className="btn secondary" onClick={() => void logout().then(() => setUser(null))}>
-              サインアウト
-            </button>
+      {!user && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">サインインして開始</CardTitle>
+            <CardDescription>配信にはログインが必要です</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            <Button asChild>
+              <a href="/api/auth/google">Googleでサインイン</a>
+            </Button>
+            <Button variant="outline" asChild>
+              <a href="/api/auth/twitter">Xでサインイン</a>
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() =>
+                void devLogin("Dev User").then(() =>
+                  fetchMe().then((r) => setUser(r.user ?? null)),
+                )
+              }
+            >
+              Devログイン
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      <SearchBarPlaceholder />
+      <CategoryTabsPlaceholder />
+      <CreateRoomForm disabled={!user} />
+
+      <section className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Radio className="size-4 text-primary" />
+          <h2 className="font-semibold">公開中のルーム</h2>
+        </div>
+
+        {roomsLoading ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <RoomSkeleton />
+            <RoomSkeleton />
+            <RoomSkeleton />
           </div>
+        ) : publicRooms.length === 0 ? (
+          <Card className="py-12 text-center">
+            <CardContent className="space-y-2">
+              <Radio className="mx-auto size-10 text-muted-foreground/50" />
+              <p className="font-medium">公開ルームはありません</p>
+              <p className="text-sm text-muted-foreground">最初の配信者になりましょう</p>
+            </CardContent>
+          </Card>
         ) : (
-          <div className="col" style={{ gap: 8 }}>
-            <div>サインインして開始</div>
-            <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-              <a className="btn" href="/api/auth/google">
-                Googleでサインイン
-              </a>
-              <a className="btn" href="/api/auth/twitter">
-                Xでサインイン
-              </a>
-              <button
-                type="button"
-                className="btn secondary"
-                onClick={() => void devLogin("Dev User").then(() => fetchMe().then((r) => setUser(r.user ?? null)))}
-              >
-                Devログイン
-              </button>
-            </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {publicRooms.map((r) => (
+              <LiveRoomCard
+                key={r.name}
+                name={r.name}
+                displayName={r.displayName}
+                viewers={r.viewers}
+              />
+            ))}
           </div>
         )}
-      </div>
-
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-          <input
-            className="input"
-            placeholder="配信タイトル"
-            value={createName}
-            onChange={(e) => setCreateName(e.target.value)}
-            style={{ flex: 1, minWidth: 0 }}
-          />
-          <button type="button" className="btn" disabled={!user || !isValidDisplayName(createName)} onClick={() => void createRoom()}>
-            配信を開始
-          </button>
-        </div>
-        <div style={{ marginTop: 8 }} className="muted">
-          公開中のルームから視聴するか、配信タイトルを入力して配信を開始できます。
-        </div>
-      </div>
-
-      <div className="card">
-        <div style={{ fontWeight: 600, marginBottom: 10 }}>公開中のルーム</div>
-        {publicRooms.length === 0 && <div className="muted">現在、公開ルームはありません。</div>}
-        <div className="grid">
-          {publicRooms.map((r) => (
-            <div key={r.name} className="card room-card">
-              <div className="row" style={{ justifyContent: "space-between" }}>
-                <div style={{ fontWeight: 600 }}>{r.displayName || r.name}</div>
-                <span className="badge-live">
-                  <span className="dot" style={{ color: "white" }} />
-                  LIVE
-                </span>
-              </div>
-              <div className="row-bottom">
-                <div className="muted">視聴者数 {r.viewers}</div>
-                <Link className="btn" to={`/room/${r.name}?publish=false`}>
-                  視聴する
-                </Link>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ marginTop: 16, textAlign: "center" }}>
-        <Link to="/admin/monitor">Monitor</Link>
-      </div>
+      </section>
     </div>
   );
 }
