@@ -42,11 +42,13 @@ if [[ -n "$D1_ID" ]]; then
   import_if_missing "cloudflare_d1_database.fork" "${ACCOUNT_ID}/${D1_ID}"
 fi
 
-# KV
-KV_JSON="$(npx wrangler kv namespace list --json 2>/dev/null || echo '[]')"
+# KV — wrangler に --json がないので API を直接叩く
+KV_JSON="$(curl -fsS \
+  -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+  "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/storage/kv/namespaces")"
 KV_ID="$(node -e "
-  const rows = JSON.parse(process.argv[1]);
-  const row = rows.find((r) => r.title === process.argv[2]);
+  const body = JSON.parse(process.argv[1]);
+  const row = (body.result ?? []).find((r) => r.title === process.argv[2]);
   process.stdout.write(row?.id ?? '');
 " "$KV_JSON" "$NAME_PREFIX")"
 
