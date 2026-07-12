@@ -104,8 +104,14 @@ jobs:
           npx wrangler deploy --env "${{ env.DEPLOY_ENV }}" -c "${{ env.WRANGLER_CONFIG }}"
 
       - name: Commit Terraform state
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "chore(terraform): update state [skip ci]"
-          file_pattern: infra/terraform/terraform.tfstate infra/terraform/terraform.tfstate.backup
-          skip_fetch: true
+        run: |
+          if git diff --quiet -- infra/terraform/terraform.tfstate 2>/dev/null \
+            && git diff --cached --quiet -- infra/terraform/terraform.tfstate 2>/dev/null; then
+            echo "No terraform state changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add infra/terraform/terraform.tfstate
+          git commit -m "chore(terraform): update state [skip ci]"
+          git push
