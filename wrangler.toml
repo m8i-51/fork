@@ -30,3 +30,11 @@ binding = "ASSETS"
 
 [vars]
 APP_URL = "http://localhost:8787"
+
+# staging / production の D1・KV ID は Terraform が管理します。
+# apply 後: infra/generated/wrangler.<env>.toml が生成され、
+#   npm run deploy:staging / deploy:production で overlay としてマージされます。
+#
+# 例:
+#   npm run infra:apply -- staging
+#   npm run deploy:staging

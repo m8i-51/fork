@@ -1,0 +1,3 @@
+cloudflare_account_id = "YOUR_CLOUDFLARE_ACCOUNT_ID"
+environment           = "production"
+app_url               = "https://fork-api.YOUR_SUBDOMAIN.workers.dev"
